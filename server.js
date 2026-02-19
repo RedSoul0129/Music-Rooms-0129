@@ -13,37 +13,46 @@ app.get("/", (req, res) => {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>YouTube Sync Rooms</title>
+    <title>YouTube Sync & Voice Rooms</title>
     <style>
         body { font-family: 'Segoe UI', Arial; text-align: center; background: #111; color: white; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: auto; background: #222; padding: 20px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .container { max-width: 900px; margin: auto; background: #222; padding: 20px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
         input, button { padding: 10px; margin: 5px; border-radius: 5px; border: none; }
         input { background: #333; color: white; width: 200px; }
-        button { background: #ff0000; color: white; cursor: pointer; font-weight: bold; }
-        button:hover { background: #cc0000; }
-        #player { margin-top: 20px; border: 3px solid #333; }
+        .btn-main { background: #ff0000; color: white; cursor: pointer; font-weight: bold; }
+        .btn-voice { background: #444; color: white; cursor: pointer; min-width: 150px; }
+        .btn-voice.active { background: #22ff22; color: black; }
+        #player { margin-top: 20px; border: 3px solid #333; pointer-events: auto; }
         .controls { margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 20px; }
+        .status-dot { height: 10px; width: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .online { background-color: #22ff22; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>YouTube Sync Rooms</h1>
+    <h1>YouTube Sync & Voice Rooms</h1>
 
     <div class="controls">
         <input id="roomName" placeholder="Room name">
         <input id="password" type="password" placeholder="Password">
         <br>
-        <button onclick="createRoom()">Create Room</button>
-        <button onclick="joinRoom()">Join Room</button>
+        <button class="btn-main" onclick="createRoom()">Create Room</button>
+        <button class="btn-main" onclick="joinRoom()">Join Room</button>
+    </div>
+
+    <div style="margin-bottom: 15px;">
+        <button id="micBtn" class="btn-voice" onclick="toggleMic()" disabled>🎤 Enable Microphone</button>
+        <span id="voiceStatus"><span class="status-dot"></span>Voice Offline</span>
     </div>
 
     <div>
-        <input id="ytLink" placeholder="Paste YouTube link here" style="width:70%;">
-        <button onclick="loadVideo()">Load Video</button>
+        <input id="ytLink" placeholder="Paste YouTube link here" style="width:60%;">
+        <button class="btn-main" onclick="loadVideo()">Load Video</button>
     </div>
 
     <div id="player"></div>
+    <div id="remote-audios"></div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -54,6 +63,11 @@ app.get("/", (req, res) => {
     let player;
     let currentRoom = null;
     let isSyncing = false;
+    
+    // Voice Chat Variables
+    let localStream;
+    let peers = {}; 
+    const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
     function extractVideoId(url) {
         const regExp = /(?:youtube\\.com.*(?:\\?|&)v=|youtu\\.be\\/)([^&#]+)/;
@@ -65,152 +79,187 @@ app.get("/", (req, res) => {
         player = new YT.Player('player', {
             height: '390',
             width: '100%',
-            videoId: '', // Initialement vide
+            videoId: '',
             playerVars: { 'rel': 0, 'origin': window.location.origin },
-            events: {
-                'onStateChange': onPlayerStateChange,
-                'onReady': onPlayerReady
-            }
+            events: { 'onStateChange': onPlayerStateChange }
         });
     }
 
-    function onPlayerReady(event) {
-        console.log("YouTube Player est prêt.");
+    // --- Voice Chat Logic ---
+    async function initVoice() {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            document.getElementById('micBtn').disabled = false;
+            document.getElementById('micBtn').innerText = "🎤 Mic: ON";
+            document.getElementById('micBtn').classList.add('active');
+            document.getElementById('voiceStatus').innerHTML = '<span class="status-dot online"></span>Voice Active';
+            return true;
+        } catch (err) {
+            alert("Could not access microphone. Please check permissions.");
+            return false;
+        }
     }
 
-    function createRoom() {
+    function toggleMic() {
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack.enabled) {
+            audioTrack.enabled = false;
+            document.getElementById('micBtn').innerText = "🔇 Mic: MUTED";
+            document.getElementById('micBtn').classList.remove('active');
+        } else {
+            audioTrack.enabled = true;
+            document.getElementById('micBtn').innerText = "🎤 Mic: ON";
+            document.getElementById('micBtn').classList.add('active');
+        }
+    }
+
+    async function createRoom() {
         const roomName = document.getElementById("roomName").value;
         const password = document.getElementById("password").value;
-        if(!roomName || !password) return alert("Please fill room name and password");
-        socket.emit("createRoom", { roomName, password });
+        if(!roomName || !password) return alert("Fill credentials");
+        if(await initVoice()) socket.emit("createRoom", { roomName, password });
     }
 
-    function joinRoom() {
+    async function joinRoom() {
         const roomName = document.getElementById("roomName").value;
         const password = document.getElementById("password").value;
-        if(!roomName || !password) return alert("Please fill room name and password");
-        socket.emit("joinRoom", { roomName, password });
+        if(!roomName || !password) return alert("Fill credentials");
+        if(await initVoice()) socket.emit("joinRoom", { roomName, password });
     }
 
-    // Réception de la confirmation de connexion à une salle
     socket.on("roomJoined", (data) => {
         if (data.success) {
             currentRoom = document.getElementById("roomName").value;
-            alert("Success! You are in room: " + currentRoom);
+            alert("Joined " + currentRoom);
         } else {
-            alert("Error: Wrong room name or password!");
+            alert("Wrong credentials");
         }
     });
 
-    function loadVideo() {
-        if (!currentRoom) return alert("Join a room first!");
-        const link = document.getElementById("ytLink").value;
-        const videoId = extractVideoId(link);
-        if (!videoId) return alert("Invalid YouTube link!");
+    // --- WebRTC Signaling ---
+    socket.on("user-joined", async (userId) => {
+        const pc = createPeerConnection(userId);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("offer", { target: userId, offer });
+    });
 
+    socket.on("offer", async ({ from, offer }) => {
+        const pc = createPeerConnection(from);
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit("answer", { target: from, answer });
+    });
+
+    socket.on("answer", async ({ from, answer }) => {
+        await peers[from].setRemoteDescription(new RTCSessionDescription(answer));
+    });
+
+    socket.on("ice-candidate", async ({ from, candidate }) => {
+        try { await peers[from].addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+    });
+
+    function createPeerConnection(userId) {
+        const pc = new RTCPeerConnection(rtcConfig);
+        peers[userId] = pc;
+
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) socket.emit("ice-candidate", { target: userId, candidate: event.candidate });
+        };
+
+        pc.ontrack = (event) => {
+            let el = document.getElementById("audio-" + userId);
+            if (!el) {
+                el = document.createElement("audio");
+                el.id = "audio-" + userId;
+                el.autoplay = true;
+                document.getElementById("remote-audios").appendChild(el);
+            }
+            el.srcObject = event.streams[0];
+        };
+
+        return pc;
+    }
+
+    // --- YouTube Logic ---
+    function loadVideo() {
+        if (!currentRoom) return alert("Join room first");
+        const videoId = extractVideoId(document.getElementById("ytLink").value);
+        if (!videoId) return alert("Invalid link");
         player.loadVideoById(videoId);
-        socket.emit("videoAction", {
-            roomName: currentRoom,
-            action: "load",
-            videoId: videoId
-        });
+        socket.emit("videoAction", { roomName: currentRoom, action: "load", videoId });
     }
 
     function onPlayerStateChange(event) {
         if (!currentRoom || isSyncing) return;
-
-        const currentTime = player.getCurrentTime();
-
-        if (event.data === YT.PlayerState.PLAYING) {
-            socket.emit("videoAction", {
-                roomName: currentRoom,
-                action: "play",
-                time: currentTime
-            });
-        } else if (event.data === YT.PlayerState.PAUSED) {
-            socket.emit("videoAction", {
-                roomName: currentRoom,
-                action: "pause",
-                time: currentTime
-            });
-        }
+        const data = { roomName: currentRoom, time: player.getCurrentTime() };
+        if (event.data === YT.PlayerState.PLAYING) socket.emit("videoAction", { ...data, action: "play" });
+        if (event.data === YT.PlayerState.PAUSED) socket.emit("videoAction", { ...data, action: "pause" });
     }
 
-    // Synchronisation reçue du serveur
     socket.on("videoAction", (data) => {
-        // Sécurité : on vérifie si le lecteur est bien initialisé
         if (!player || typeof player.loadVideoById !== 'function') return;
-
         isSyncing = true;
+        if (data.action === "load") player.loadVideoById(data.videoId);
+        if (data.action === "play") { player.seekTo(data.time, true); player.playVideo(); }
+        if (data.action === "pause") { player.seekTo(data.time, true); player.pauseVideo(); }
+        setTimeout(() => isSyncing = false, 800);
+    });
 
-        if (data.action === "load") {
-            player.loadVideoById(data.videoId);
-        } else if (data.action === "play") {
-            player.seekTo(data.time, true);
-            player.playVideo();
-        } else if (data.action === "pause") {
-            player.seekTo(data.time, true);
-            player.pauseVideo();
+    socket.on("user-left", (userId) => {
+        if (peers[userId]) {
+            peers[userId].close();
+            delete peers[userId];
         }
-
-        // Empêche les boucles infinies d'évènements
-        setTimeout(() => { isSyncing = false; }, 800);
+        const el = document.getElementById("audio-" + userId);
+        if (el) el.remove();
     });
 </script>
-
 </body>
 </html>
 `);
 });
 
-// LOGIQUE SERVEUR (Node.js)
+// --- SERVER LOGIC ---
 io.on("connection", (socket) => {
-    console.log("Nouveau client connecté : " + socket.id);
-
     socket.on("createRoom", ({ roomName, password }) => {
-        rooms[roomName] = {
-            password: password,
-            videoState: null
-        };
+        rooms[roomName] = { password, videoState: null };
         socket.join(roomName);
         socket.emit("roomJoined", { success: true });
-        console.log("Chambre créée : " + roomName);
     });
 
     socket.on("joinRoom", ({ roomName, password }) => {
         const room = rooms[roomName];
-
-        if (!room || room.password !== password) {
-            socket.emit("roomJoined", { success: false });
-            return;
-        }
+        if (!room || room.password !== password) return socket.emit("roomJoined", { success: false });
 
         socket.join(roomName);
         socket.emit("roomJoined", { success: true });
-        console.log(socket.id + " a rejoint : " + roomName);
+        
+        // Tell others in the room to connect to this new user for voice
+        socket.to(roomName).emit("user-joined", socket.id);
 
-        // Envoyer l'état actuel de la vidéo au nouvel arrivant
-        if (room.videoState) {
-            socket.emit("videoAction", room.videoState);
+        if (room.videoState) socket.emit("videoAction", room.videoState);
+    });
+
+    // Signaling Relay
+    socket.on("offer", ({ target, offer }) => io.to(target).emit("offer", { from: socket.id, offer }));
+    socket.on("answer", ({ target, answer }) => io.to(target).emit("answer", { from: socket.id, answer }));
+    socket.on("ice-candidate", ({ target, candidate }) => io.to(target).emit("ice-candidate", { from: socket.id, candidate }));
+
+    socket.on("videoAction", (data) => {
+        if (rooms[data.roomName]) {
+            rooms[data.roomName].videoState = data;
+            socket.to(data.roomName).emit("videoAction", data);
         }
     });
 
-    socket.on("videoAction", (data) => {
-        if (!rooms[data.roomName]) return;
-
-        // On enregistre l'état pour les futurs arrivants
-        rooms[data.roomName].videoState = data;
-
-        // On diffuse aux autres membres de la chambre
-        socket.to(data.roomName).emit("videoAction", data);
-    });
-
     socket.on("disconnect", () => {
-        console.log("Client déconnecté.");
+        io.emit("user-left", socket.id);
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log("Server is running on port " + PORT);
-});
+server.listen(PORT, () => console.log("Server running..."));
