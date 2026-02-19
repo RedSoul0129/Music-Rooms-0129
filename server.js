@@ -22,7 +22,7 @@ app.get("/", (req, res) => {
         .btn-main { background: #ff0000; color: white; cursor: pointer; font-weight: bold; }
         .btn-voice { background: #444; color: white; cursor: pointer; min-width: 150px; }
         .btn-voice.active { background: #22ff22; color: black; }
-        #player { margin-top: 20px; border: 3px solid #333; pointer-events: auto; }
+        #player { margin-top: 20px; border: 3px solid #333; }
         .controls { margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 20px; }
         .status-dot { height: 10px; width: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
         .online { background-color: #22ff22; }
@@ -64,10 +64,14 @@ app.get("/", (req, res) => {
     let currentRoom = null;
     let isSyncing = false;
     
-    // Voice Chat Variables
     let localStream;
     let peers = {}; 
-    const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    const rtcConfig = { 
+        iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" }
+        ] 
+    };
 
     function extractVideoId(url) {
         const regExp = /(?:youtube\\.com.*(?:\\?|&)v=|youtu\\.be\\/)([^&#]+)/;
@@ -85,59 +89,57 @@ app.get("/", (req, res) => {
         });
     }
 
-    // --- Voice Chat Logic ---
     async function initVoice() {
+        if (localStream) return true;
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             document.getElementById('micBtn').disabled = false;
             document.getElementById('micBtn').innerText = "🎤 Mic: ON";
             document.getElementById('micBtn').classList.add('active');
             document.getElementById('voiceStatus').innerHTML = '<span class="status-dot online"></span>Voice Active';
             return true;
         } catch (err) {
-            alert("Could not access microphone. Please check permissions.");
+            console.error("Erreur Micro:", err);
+            alert("Accès micro refusé ou non disponible.");
             return false;
         }
     }
 
     function toggleMic() {
         const audioTrack = localStream.getAudioTracks()[0];
-        if (audioTrack.enabled) {
-            audioTrack.enabled = false;
-            document.getElementById('micBtn').innerText = "🔇 Mic: MUTED";
-            document.getElementById('micBtn').classList.remove('active');
-        } else {
-            audioTrack.enabled = true;
-            document.getElementById('micBtn').innerText = "🎤 Mic: ON";
-            document.getElementById('micBtn').classList.add('active');
-        }
+        audioTrack.enabled = !audioTrack.enabled;
+        document.getElementById('micBtn').innerText = audioTrack.enabled ? "🎤 Mic: ON" : "🔇 Mic: MUTED";
+        document.getElementById('micBtn').classList.toggle('active', audioTrack.enabled);
     }
 
     async function createRoom() {
-        const roomName = document.getElementById("roomName").value;
-        const password = document.getElementById("password").value;
-        if(!roomName || !password) return alert("Fill credentials");
-        if(await initVoice()) socket.emit("createRoom", { roomName, password });
+        if(await initVoice()) {
+            const roomName = document.getElementById("roomName").value;
+            const password = document.getElementById("password").value;
+            socket.emit("createRoom", { roomName, password });
+        }
     }
 
     async function joinRoom() {
-        const roomName = document.getElementById("roomName").value;
-        const password = document.getElementById("password").value;
-        if(!roomName || !password) return alert("Fill credentials");
-        if(await initVoice()) socket.emit("joinRoom", { roomName, password });
+        if(await initVoice()) {
+            const roomName = document.getElementById("roomName").value;
+            const password = document.getElementById("password").value;
+            socket.emit("joinRoom", { roomName, password });
+        }
     }
 
     socket.on("roomJoined", (data) => {
         if (data.success) {
             currentRoom = document.getElementById("roomName").value;
-            alert("Joined " + currentRoom);
+            console.log("Connecté à la salle:", currentRoom);
         } else {
-            alert("Wrong credentials");
+            alert("Mot de passe incorrect");
         }
     });
 
-    // --- WebRTC Signaling ---
+    // WebRTC SIGNALING
     socket.on("user-joined", async (userId) => {
+        console.log("Nouvel utilisateur détecté:", userId);
         const pc = createPeerConnection(userId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -153,17 +155,22 @@ app.get("/", (req, res) => {
     });
 
     socket.on("answer", async ({ from, answer }) => {
-        await peers[from].setRemoteDescription(new RTCSessionDescription(answer));
+        if (peers[from]) {
+            await peers[from].setRemoteDescription(new RTCSessionDescription(answer));
+        }
     });
 
     socket.on("ice-candidate", async ({ from, candidate }) => {
-        try { await peers[from].addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+        if (peers[from]) {
+            try { await peers[from].addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+        }
     });
 
     function createPeerConnection(userId) {
         const pc = new RTCPeerConnection(rtcConfig);
         peers[userId] = pc;
 
+        // On ajoute notre micro à la connexion
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
         pc.onicecandidate = (event) => {
@@ -171,24 +178,28 @@ app.get("/", (req, res) => {
         };
 
         pc.ontrack = (event) => {
+            console.log("Flux audio reçu de:", userId);
             let el = document.getElementById("audio-" + userId);
             if (!el) {
                 el = document.createElement("audio");
                 el.id = "audio-" + userId;
                 el.autoplay = true;
+                el.controls = false; // Garder caché mais actif
                 document.getElementById("remote-audios").appendChild(el);
             }
             el.srcObject = event.streams[0];
+            // Fix pour Chrome/Safari : forcer la lecture
+            el.play().catch(e => console.log("Lecture auto bloquée, attente interaction..."));
         };
 
         return pc;
     }
 
-    // --- YouTube Logic ---
+    // YOUTUBE SYNC
     function loadVideo() {
-        if (!currentRoom) return alert("Join room first");
+        if (!currentRoom) return alert("Rejoignez une salle d'abord");
         const videoId = extractVideoId(document.getElementById("ytLink").value);
-        if (!videoId) return alert("Invalid link");
+        if (!videoId) return alert("Lien invalide");
         player.loadVideoById(videoId);
         socket.emit("videoAction", { roomName: currentRoom, action: "load", videoId });
     }
@@ -223,7 +234,7 @@ app.get("/", (req, res) => {
 `);
 });
 
-// --- SERVER LOGIC ---
+// LOGIQUE SERVEUR
 io.on("connection", (socket) => {
     socket.on("createRoom", ({ roomName, password }) => {
         rooms[roomName] = { password, videoState: null };
@@ -238,13 +249,12 @@ io.on("connection", (socket) => {
         socket.join(roomName);
         socket.emit("roomJoined", { success: true });
         
-        // Tell others in the room to connect to this new user for voice
+        // On prévient les autres membres de lancer la connexion WebRTC
         socket.to(roomName).emit("user-joined", socket.id);
 
         if (room.videoState) socket.emit("videoAction", room.videoState);
     });
 
-    // Signaling Relay
     socket.on("offer", ({ target, offer }) => io.to(target).emit("offer", { from: socket.id, offer }));
     socket.on("answer", ({ target, answer }) => io.to(target).emit("answer", { from: socket.id, answer }));
     socket.on("ice-candidate", ({ target, candidate }) => io.to(target).emit("ice-candidate", { from: socket.id, candidate }));
@@ -257,9 +267,9 @@ io.on("connection", (socket) => {
     });
 
     socket.on("disconnect", () => {
-        io.emit("user-left", socket.id);
+        socket.broadcast.emit("user-left", socket.id);
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log("Server running..."));
+server.listen(PORT, () => console.log("Serveur lancé sur le port " + PORT));
