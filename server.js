@@ -67,25 +67,31 @@ function createRoom() {
   const roomName = document.getElementById("roomName").value;
   const password = document.getElementById("password").value;
   socket.emit("createRoom", { roomName, password });
-  currentRoom = roomName;
 }
 
 function joinRoom() {
   const roomName = document.getElementById("roomName").value;
   const password = document.getElementById("password").value;
   socket.emit("joinRoom", { roomName, password });
-  currentRoom = roomName;
 }
+
+// ---- LOGIQUE DE RÉCEPTION AJOUTÉE ICI ----
+socket.on("roomJoined", (data) => {
+  if (data.success) {
+    currentRoom = document.getElementById("roomName").value;
+    alert("Joined room successfully: " + currentRoom);
+  } else {
+    alert("Wrong room name or password!");
+  }
+});
 
 function loadVideo() {
   if (!currentRoom) return alert("Join a room first");
-
   const link = document.getElementById("ytLink").value;
   const videoId = extractVideoId(link);
   if (!videoId) return alert("Invalid YouTube link");
 
   player.loadVideoById(videoId);
-
   socket.emit("videoAction", {
     roomName: currentRoom,
     action: "load",
@@ -95,7 +101,6 @@ function loadVideo() {
 
 function onPlayerStateChange(event) {
   if (!currentRoom || isSyncing) return;
-
   if (event.data === YT.PlayerState.PLAYING) {
     socket.emit("videoAction", {
       roomName: currentRoom,
@@ -103,7 +108,6 @@ function onPlayerStateChange(event) {
       time: player.getCurrentTime()
     });
   }
-
   if (event.data === YT.PlayerState.PAUSED) {
     socket.emit("videoAction", {
       roomName: currentRoom,
@@ -115,80 +119,44 @@ function onPlayerStateChange(event) {
 
 socket.on("videoAction", (data) => {
   isSyncing = true;
-
-  if (data.action === "load") {
-    player.loadVideoById(data.videoId);
-  }
-
-  if (data.action === "play") {
-    player.seekTo(data.time, true);
-    player.playVideo();
-  }
-
-  if (data.action === "pause") {
-    player.seekTo(data.time, true);
-    player.pauseVideo();
-  }
-
+  if (data.action === "load") player.loadVideoById(data.videoId);
+  if (data.action === "play") { player.seekTo(data.time, true); player.playVideo(); }
+  if (data.action === "pause") { player.seekTo(data.time, true); player.pauseVideo(); }
   setTimeout(() => isSyncing = false, 500);
 });
 </script>
-
 </body>
 </html>
 `);
 });
 
+// ---- SERVEUR (LOGIQUE DE CONNEXION) ----
 io.on("connection", (socket) => {
-
   socket.on("createRoom", ({ roomName, password }) => {
-    rooms[roomName] = {
-      password,
-      videoState: null
-    };
+    rooms[roomName] = { password, videoState: null };
     socket.join(roomName);
     socket.emit("roomJoined", { success: true });
   });
 
   socket.on("joinRoom", ({ roomName, password }) => {
     const room = rooms[roomName];
-
     if (!room || room.password !== password) {
       socket.emit("roomJoined", { success: false });
       return;
     }
-
     socket.join(roomName);
     socket.emit("roomJoined", { success: true });
-
-    if (room.videoState) {
-      socket.emit("videoAction", room.videoState);
-    }
+    if (room.videoState) socket.emit("videoAction", room.videoState);
   });
 
   socket.on("videoAction", (data) => {
     if (!rooms[data.roomName]) return;
-
     rooms[data.roomName].videoState = data;
-
     socket.to(data.roomName).emit("videoAction", data);
   });
-
 });
-socket.on("roomJoined", (data) => {
-  if (data.success) {
-    alert("Joined room successfully!");
-  } else {
-    alert("Wrong room name or password!");
-  }
-});
-
 
 const PORT = process.env.PORT || 3000;
-
 server.listen(PORT, () => {
-
-  console.log("Running at http://localhost:3000");
+  console.log("Server running on port " + PORT);
 });
-
-
