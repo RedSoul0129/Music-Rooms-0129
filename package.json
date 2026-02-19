@@ -1,6 +1,6 @@
-{
-  "dependencies": {
+"dependencies": {
     "express": "^5.2.1",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "lokijs": "^1.5.12",
+    "path": "^0.12.7"
   }
-}
