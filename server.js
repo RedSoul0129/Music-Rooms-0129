@@ -14,59 +14,118 @@ app.get("/", (req, res) => {
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Multi-Screen 60FPS Sync</title>
+    <title>Royal Sync & Stream Gold</title>
     <style>
-        :root { --primary: #ff0044; --accent: #00d4ff; --bg: #0b0b0e; --text: #fff; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        :root { 
+            --gold: linear-gradient(135deg, #d4af37 0%, #f9f295 50%, #b38728 100%);
+            --gold-solid: #d4af37;
+            --dark: #050505;
+            --card: #121212;
+            --text: #f1f1f1;
+        }
         
-        .header { display: flex; flex-wrap: wrap; gap: 10px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 15px; margin-bottom: 20px; align-items: center; }
-        input, select { padding: 8px; background: #222; border: 1px solid #444; color: white; border-radius: 5px; }
+        body { 
+            font-family: 'Playfair Display', serif; 
+            background: var(--dark); 
+            color: var(--text); 
+            margin: 0; padding: 20px;
+            background-image: radial-gradient(circle at center, #1a1a1a 0%, #050505 100%);
+        }
         
-        button { padding: 8px 15px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .btn-p { background: var(--primary); color: white; }
-        .btn-s { background: var(--accent); color: black; }
-        .active { outline: 3px solid var(--accent); transform: scale(1.02); }
+        .royal-header { 
+            background: var(--card);
+            border: 1px solid var(--gold-solid);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(212, 175, 55, 0.1);
+            display: flex; flex-wrap: wrap; gap: 15px; align-items: center;
+            justify-content: center;
+        }
 
-        /* GRILLE DYNAMIQUE */
+        h1 { 
+            background: var(--gold);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5rem; margin: 0; width: 100%; text-align: center;
+            text-transform: uppercase; letter-spacing: 3px;
+        }
+
+        input, select { 
+            padding: 12px; background: #1a1a1a; border: 1px solid #444; 
+            color: white; border-radius: 5px; outline: none; transition: 0.3s;
+        }
+        input:focus { border-color: var(--gold-solid); box-shadow: 0 0 10px rgba(212, 175, 55, 0.3); }
+
+        button { 
+            padding: 12px 20px; border-radius: 5px; border: none; 
+            font-weight: bold; cursor: pointer; transition: 0.4s; 
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+
+        .btn-gold { background: var(--gold); color: #000; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2); }
+        .btn-gold:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4); }
+        
+        .btn-outline { background: transparent; border: 1px solid var(--gold-solid); color: var(--gold-solid); }
+        .btn-outline:hover { background: rgba(212, 175, 55, 0.1); }
+        
+        .btn-mute-active { background: #ff4444 !important; color: white !important; }
+
         #video-grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); 
-            gap: 15px; 
-            width: 100%; 
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); 
+            gap: 25px; width: 100%; 
         }
 
         .video-card { 
-            background: #000; border-radius: 12px; overflow: hidden; 
-            border: 2px solid #333; position: relative; aspect-ratio: 16/9;
+            background: #000; border-radius: 10px; overflow: hidden; 
+            border: 1px solid var(--gold-solid); position: relative; aspect-ratio: 16/9;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
         }
-        .video-card label { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 4px; font-size: 12px; z-index: 10; }
+
+        .video-label { 
+            position: absolute; top: 15px; left: 15px; z-index: 10;
+            background: rgba(0,0,0,0.8); border: 1px solid var(--gold-solid);
+            padding: 5px 12px; border-radius: 5px; color: var(--gold-solid);
+            font-size: 0.8rem; pointer-events: none;
+        }
+
+        .fs-btn {
+            position: absolute; bottom: 15px; right: 15px; z-index: 10;
+            background: var(--gold); border: none; border-radius: 5px;
+            padding: 8px; cursor: pointer; opacity: 0.3; transition: 0.3s;
+        }
+        .video-card:hover .fs-btn { opacity: 1; }
+
         video { width: 100%; height: 100%; object-fit: contain; }
-        
-        #yt-container { grid-column: 1 / -1; margin-bottom: 10px; } /* YouTube prend toute la largeur en haut */
-        #player { width: 100%; aspect-ratio: 16/9; border-radius: 12px; }
+        #yt-container { grid-column: 1 / -1; }
+        #player { width: 100%; height: 100%; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h2 style="margin:0; color:var(--primary)">SyncStream 60fps</h2>
-    <input id="roomName" placeholder="Salle">
-    <input id="password" type="password" placeholder="Pass" style="width:80px">
-    <button class="btn-p" onclick="joinRoom()">Rejoindre / Créer</button>
-    <div style="border-left: 1px solid #444; height: 30px; margin: 0 10px;"></div>
+<div class="royal-header">
+    <h1>👑 Royal Sync & Stream</h1>
+    <input id="roomName" placeholder="SALLE">
+    <input id="password" type="password" placeholder="CLÉ">
+    <button class="btn-gold" onclick="joinRoom()">Entrer au Palais</button>
+    
+    <div style="width:100%; height:1px; background:rgba(212,175,55,0.2); margin:10px 0;"></div>
+    
     <select id="audioSource" onchange="changeAudioSource()"></select>
-    <button id="micBtn" style="background:#444; color:white;" onclick="toggleMic()" disabled>🎤</button>
-    <button id="screenBtn" class="btn-s" onclick="toggleScreenShare()">🖥️ Partager mon écran (60 FPS)</button>
-    <input id="ytLink" placeholder="Lien YouTube..." style="flex-grow:1">
-    <button class="btn-p" onclick="loadVideo()">Charger</button>
+    <button id="micBtn" class="btn-outline" onclick="toggleMic()" disabled>🎤 MICRO : ON</button>
+    <button id="screenBtn" class="btn-gold" onclick="toggleScreenShare()">🖥️ Diffuser Écran (60FPS)</button>
+    
+    <input id="ytLink" placeholder="Lien YouTube Royal..." style="flex-grow:1">
+    <button class="btn-gold" onclick="loadVideo()">Charger</button>
 </div>
 
 <div id="video-grid">
     <div id="yt-container" class="video-card">
-        <label>YouTube Sync</label>
+        <div class="video-label">Lectorat Royal</div>
         <div id="player"></div>
+        <button class="fs-btn" onclick="makeFullScreen('yt-container')">⛶</button>
     </div>
-    </div>
+</div>
 
 <div id="remote-audios"></div>
 
@@ -80,15 +139,29 @@ app.get("/", (req, res) => {
     let peers = {}; 
     const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
-    // --- 60 FPS CONFIG ---
-    const screenConstraints = {
-        video: {
-            cursor: "always",
-            frameRate: { ideal: 60, max: 60 }, // FORCER 60 FPS
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
+    // --- REPARATION MUTE/UNMUTE ---
+    function toggleMic() {
+        if (!localStream) return;
+        const audioTrack = localStream.getAudioTracks()[0];
+        audioTrack.enabled = !audioTrack.enabled;
+        
+        const btn = document.getElementById('micBtn');
+        if (audioTrack.enabled) {
+            btn.innerText = "🎤 MICRO : ON";
+            btn.classList.remove('btn-mute-active');
+        } else {
+            btn.innerText = "🔇 MICRO : COUPÉ";
+            btn.classList.add('btn-mute-active');
         }
-    };
+    }
+
+    // --- PLEIN ÉCRAN ---
+    function makeFullScreen(id) {
+        const el = document.getElementById(id);
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        else if (el.msRequestFullscreen) el.msRequestFullscreen();
+    }
 
     async function initVoice() {
         if (localStream) return true;
@@ -103,7 +176,7 @@ app.get("/", (req, res) => {
             });
             document.getElementById('micBtn').disabled = false;
             return true;
-        } catch (e) { alert("Micro requis"); return false; }
+        } catch (e) { alert("Accès micro refusé"); return false; }
     }
 
     async function toggleScreenShare() {
@@ -112,39 +185,32 @@ app.get("/", (req, res) => {
             stopScreenShare();
         } else {
             try {
-                screenStream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
-                document.getElementById('screenBtn').classList.add('active');
-                
-                // On ajoute notre propre vidéo à notre grille
-                addVideoToGrid('local-screen', screenStream, "Mon Écran (60 FPS)");
-
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { frameRate: { ideal: 60, max: 60 }, width: 1920, height: 1080 }
+                });
+                addVideoToGrid('local-screen', screenStream, "Votre Diffusion");
                 Object.values(peers).forEach(pc => {
-                    screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
+                    screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
                     renegotiate(pc);
                 });
-
                 screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
             } catch (e) { console.error(e); }
         }
     }
 
     function stopScreenShare() {
-        if (screenStream) {
-            screenStream.getTracks().forEach(t => t.stop());
-            screenStream = null;
-        }
-        document.getElementById('screenBtn').classList.remove('active');
+        if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
         document.getElementById('local-screen')?.remove();
     }
 
     function addVideoToGrid(id, stream, labelText) {
         if (document.getElementById(id)) return;
-        const container = document.getElementById('video-grid');
         const card = document.createElement('div');
-        card.id = id;
-        card.className = 'video-card';
-        card.innerHTML = \`<label>\${labelText}</label><video autoplay playsinline></video>\`;
-        container.appendChild(card);
+        card.id = id; card.className = 'video-card';
+        card.innerHTML = \`<div class="video-label">\${labelText}</div>
+                          <video autoplay playsinline></video>
+                          <button class="fs-btn" onclick="makeFullScreen('\${id}')">⛶</button>\`;
+        document.getElementById('video-grid').appendChild(card);
         card.querySelector('video').srcObject = stream;
     }
 
@@ -156,19 +222,13 @@ app.get("/", (req, res) => {
 
     function createPeerConnection(userId) {
         const pc = new RTCPeerConnection(rtcConfig);
-        pc.userId = userId;
-        peers[userId] = pc;
-
+        pc.userId = userId; peers[userId] = pc;
         if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
         if (screenStream) screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
-
         pc.onicecandidate = (e) => { if (e.candidate) socket.emit("ice-candidate", { target: userId, candidate: e.candidate }); };
-        
         pc.ontrack = (e) => {
-            if (e.track.kind === 'video') {
-                // Un flux vidéo arrive ! On l'ajoute à la grille
-                addVideoToGrid('remote-video-' + userId, e.streams[0], "Écran de " + userId.slice(0,4));
-            } else {
+            if (e.track.kind === 'video') addVideoToGrid('remote-' + userId, e.streams[0], "Salle de " + userId.slice(0,4));
+            else {
                 let el = document.getElementById("audio-" + userId) || document.createElement("audio");
                 el.id = "audio-" + userId; el.autoplay = true;
                 document.getElementById("remote-audios").appendChild(el);
@@ -180,18 +240,19 @@ app.get("/", (req, res) => {
 
     async function joinRoom() { 
         if(await initVoice()) {
-            const roomName = document.getElementById("roomName").value;
-            const password = document.getElementById("password").value;
-            socket.emit("joinRoom", { roomName, password }); 
+            socket.emit("joinRoom", { 
+                roomName: document.getElementById("roomName").value, 
+                password: document.getElementById("password").value 
+            }); 
         }
     }
 
     socket.on("roomJoined", (data) => { if (data.success) currentRoom = document.getElementById("roomName").value; });
-    socket.on("user-joined", async (userId) => {
-        const pc = createPeerConnection(userId);
+    socket.on("user-joined", async (id) => {
+        const pc = createPeerConnection(id);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit("offer", { target: userId, offer });
+        socket.emit("offer", { target: id, offer });
     });
     socket.on("offer", async ({ from, offer }) => {
         const pc = createPeerConnection(from);
@@ -203,7 +264,6 @@ app.get("/", (req, res) => {
     socket.on("answer", ({ from, answer }) => { if (peers[from]) peers[from].setRemoteDescription(new RTCSessionDescription(answer)); });
     socket.on("ice-candidate", ({ from, candidate }) => { if (peers[from]) peers[from].addIceCandidate(new RTCIceCandidate(candidate)).catch(e=>{}); });
 
-    // --- YOUTUBE SYNC ---
     function onYouTubeIframeAPIReady() {
         player = new YT.Player('player', { height: '100%', width: '100%', events: { 'onStateChange': onPlayerStateChange } });
     }
@@ -224,11 +284,10 @@ app.get("/", (req, res) => {
         if (d.action === "pause") { player.seekTo(d.time, true); player.pauseVideo(); }
         setTimeout(() => isSyncing = false, 800);
     });
-
     socket.on("user-left", (id) => { 
         if(peers[id]) { peers[id].close(); delete peers[id]; }
         document.getElementById("audio-"+id)?.remove(); 
-        document.getElementById("remote-video-"+id)?.remove();
+        document.getElementById("remote-"+id)?.remove();
     });
 </script>
 </body>
@@ -254,4 +313,4 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log("60FPS Grid Online!"));
+server.listen(PORT, () => console.log("Majesté, le Palais est ouvert."));
