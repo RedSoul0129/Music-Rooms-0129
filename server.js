@@ -204,7 +204,7 @@ io.on("connection", (socket) => {
 
     socket.on('joinRoom', (d) => {
         socket.join(d.roomName);
-        console.log(\`\${activeUsers[socket.id]} est entré dans \${d.roomName}\`);
+       console.log(activeUsers[socket.id] + " est entré dans " + d.roomName);
     });
 
     socket.on('chat-msg', (data) => {
@@ -226,3 +226,4 @@ io.on("connection", (socket) => {
 });
 
 server.listen(process.env.PORT || 3000);
+
