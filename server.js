@@ -142,20 +142,47 @@ socket.on("videoAction", (data) => {
 io.on("connection", (socket) => {
 
   socket.on("createRoom", ({ roomName, password }) => {
-    rooms[roomName] = { password };
+    rooms[roomName] = {
+      password,
+      videoState: null
+    };
     socket.join(roomName);
+    socket.emit("roomJoined", { success: true });
   });
 
   socket.on("joinRoom", ({ roomName, password }) => {
-    if (!rooms[roomName] || rooms[roomName].password !== password) return;
+    const room = rooms[roomName];
+
+    if (!room || room.password !== password) {
+      socket.emit("roomJoined", { success: false });
+      return;
+    }
+
     socket.join(roomName);
+    socket.emit("roomJoined", { success: true });
+
+    if (room.videoState) {
+      socket.emit("videoAction", room.videoState);
+    }
   });
 
   socket.on("videoAction", (data) => {
+    if (!rooms[data.roomName]) return;
+
+    rooms[data.roomName].videoState = data;
+
     socket.to(data.roomName).emit("videoAction", data);
   });
 
 });
+socket.on("roomJoined", (data) => {
+  if (data.success) {
+    alert("Joined room successfully!");
+  } else {
+    alert("Wrong room name or password!");
+  }
+});
+
 
 const PORT = process.env.PORT || 3000;
 
@@ -163,4 +190,5 @@ server.listen(PORT, () => {
 
   console.log("Running at http://localhost:3000");
 });
+
 
