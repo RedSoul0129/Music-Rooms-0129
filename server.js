@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const path = require("path");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -8,6 +9,12 @@ const io = new Server(server);
 
 const rooms = {};
 
+// Cette ligne indique à Express de servir ton image logo.png
+// quand le navigateur la demande.
+app.get("/logo.png", (req, res) => {
+    res.sendFile(path.join(__dirname, "logo.png"));
+});
+
 app.get("/", (req, res) => {
   res.send(`
 <!DOCTYPE html>
@@ -15,6 +22,8 @@ app.get("/", (req, res) => {
 <head>
     <meta charset="UTF-8">
     <title>Royal Sync & Stream Gold</title>
+    <link rel="icon" type="image/png" href="/logo.png">
+    
     <style>
         :root { 
             --gold: linear-gradient(135deg, #d4af37 0%, #f9f295 50%, #b38728 100%);
@@ -43,6 +52,16 @@ app.get("/", (req, res) => {
             justify-content: center;
         }
 
+        .app-logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 15px;
+            border: 2px solid var(--gold-solid);
+            margin-bottom: 10px;
+            object-fit: cover;
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+        }
+
         h1 { 
             background: var(--gold);
             -webkit-background-clip: text;
@@ -69,7 +88,7 @@ app.get("/", (req, res) => {
         .btn-outline { background: transparent; border: 1px solid var(--gold-solid); color: var(--gold-solid); }
         .btn-outline:hover { background: rgba(212, 175, 55, 0.1); }
         
-        .btn-mute-active { background: #ff4444 !important; color: white !important; }
+        .btn-mute-active { background: #ff4444 !important; color: white !important; border-color: #ff4444 !important; }
 
         #video-grid { 
             display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); 
@@ -92,7 +111,7 @@ app.get("/", (req, res) => {
         .fs-btn {
             position: absolute; bottom: 15px; right: 15px; z-index: 10;
             background: var(--gold); border: none; border-radius: 5px;
-            padding: 8px; cursor: pointer; opacity: 0.3; transition: 0.3s;
+            padding: 8px; cursor: pointer; opacity: 0.4; transition: 0.3s;
         }
         .video-card:hover .fs-btn { opacity: 1; }
 
@@ -104,26 +123,28 @@ app.get("/", (req, res) => {
 <body>
 
 <div class="royal-header">
+    <img src="/logo.png" class="app-logo" alt="Logo Royal">
     <h1>👑 Royal Sync & Stream</h1>
-    <input id="roomName" placeholder="SALLE">
-    <input id="password" type="password" placeholder="CLÉ">
+    
+    <input id="roomName" placeholder="NOM DE LA SALLE">
+    <input id="password" type="password" placeholder="CLÉ D'ACCÈS">
     <button class="btn-gold" onclick="joinRoom()">Entrer au Palais</button>
     
-    <div style="width:100%; height:1px; background:rgba(212,175,55,0.2); margin:10px 0;"></div>
+    <div style="width:100%; height:1px; background:rgba(212,175,55,0.2); margin:15px 0;"></div>
     
-    <select id="audioSource" onchange="changeAudioSource()"></select>
+    <select id="audioSource" onchange="changeAudioSource()" title="Choisir le micro"></select>
     <button id="micBtn" class="btn-outline" onclick="toggleMic()" disabled>🎤 MICRO : ON</button>
     <button id="screenBtn" class="btn-gold" onclick="toggleScreenShare()">🖥️ Diffuser Écran (60FPS)</button>
     
-    <input id="ytLink" placeholder="Lien YouTube Royal..." style="flex-grow:1">
-    <button class="btn-gold" onclick="loadVideo()">Charger</button>
+    <input id="ytLink" placeholder="Coller un lien YouTube..." style="flex-grow:1">
+    <button class="btn-gold" onclick="loadVideo()">Charger Vidéo</button>
 </div>
 
 <div id="video-grid">
     <div id="yt-container" class="video-card">
-        <div class="video-label">Lectorat Royal</div>
+        <div class="video-label">Lectorat Royal (YouTube)</div>
         <div id="player"></div>
-        <button class="fs-btn" onclick="makeFullScreen('yt-container')">⛶</button>
+        <button class="fs-btn" title="Plein Écran" onclick="makeFullScreen('yt-container')">⛶</button>
     </div>
 </div>
 
@@ -139,7 +160,7 @@ app.get("/", (req, res) => {
     let peers = {}; 
     const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
-    // --- REPARATION MUTE/UNMUTE ---
+    // --- LOGIQUE MICRO (RÉPARÉE) ---
     function toggleMic() {
         if (!localStream) return;
         const audioTrack = localStream.getAudioTracks()[0];
@@ -160,7 +181,6 @@ app.get("/", (req, res) => {
         const el = document.getElementById(id);
         if (el.requestFullscreen) el.requestFullscreen();
         else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-        else if (el.msRequestFullscreen) el.msRequestFullscreen();
     }
 
     async function initVoice() {
@@ -169,18 +189,32 @@ app.get("/", (req, res) => {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const devices = await navigator.mediaDevices.enumerateDevices();
             const select = document.getElementById('audioSource');
+            select.innerHTML = '';
             devices.filter(d => d.kind === 'audioinput').forEach(d => {
                 const opt = document.createElement('option');
-                opt.value = d.deviceId; opt.text = d.label || 'Micro';
+                opt.value = d.deviceId; opt.text = d.label || 'Micro ' + (select.length + 1);
                 select.appendChild(opt);
             });
             document.getElementById('micBtn').disabled = false;
             return true;
-        } catch (e) { alert("Accès micro refusé"); return false; }
+        } catch (e) { alert("Accès micro requis pour entrer."); return false; }
+    }
+
+    async function changeAudioSource() {
+        if (!localStream) return;
+        const deviceId = document.getElementById('audioSource').value;
+        const newStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
+        const newTrack = newStream.getAudioTracks()[0];
+        Object.values(peers).forEach(pc => {
+            const sender = pc.getSenders().find(s => s.track.kind === 'audio');
+            if (sender) sender.replaceTrack(newTrack);
+        });
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = newStream;
     }
 
     async function toggleScreenShare() {
-        if (!currentRoom) return alert("Rejoignez une salle !");
+        if (!currentRoom) return alert("Rejoignez une salle d'abord !");
         if (screenStream) {
             stopScreenShare();
         } else {
@@ -188,7 +222,7 @@ app.get("/", (req, res) => {
                 screenStream = await navigator.mediaDevices.getDisplayMedia({
                     video: { frameRate: { ideal: 60, max: 60 }, width: 1920, height: 1080 }
                 });
-                addVideoToGrid('local-screen', screenStream, "Votre Diffusion");
+                addVideoToGrid('local-screen', screenStream, "Votre Diffusion (60FPS)");
                 Object.values(peers).forEach(pc => {
                     screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
                     renegotiate(pc);
@@ -247,7 +281,7 @@ app.get("/", (req, res) => {
         }
     }
 
-    socket.on("roomJoined", (data) => { if (data.success) currentRoom = document.getElementById("roomName").value; });
+    socket.on("roomJoined", (data) => { if (data.success) currentRoom = document.getElementById("roomName").value; else alert("Erreur d'accès."); });
     socket.on("user-joined", async (id) => {
         const pc = createPeerConnection(id);
         const offer = await pc.createOffer();
@@ -295,7 +329,7 @@ app.get("/", (req, res) => {
 `);
 });
 
-// --- SERVER ---
+// --- LOGIQUE SERVEUR ---
 io.on("connection", (socket) => {
     socket.on("joinRoom", (d) => {
         if (!rooms[d.roomName]) rooms[d.roomName] = { password: d.password, videoState: null };
@@ -313,4 +347,4 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log("Majesté, le Palais est ouvert."));
+server.listen(PORT, () => console.log("Le serveur Royal est en ligne sur le port " + PORT));
