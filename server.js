@@ -7,21 +7,18 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 5e7 });
 
-// --- BASE DE DONNÉES ---
 const db = new loki("royal_palace.db", { autosave: true, autosaveInterval: 4000 });
 let users = db.getCollection("users") || db.addCollection("users");
-let groups = db.getCollection("groups") || db.addCollection("groups");
 let messages = db.getCollection("messages") || db.addCollection("messages");
 
 const MARKET_ITEMS = [
     { id: 'f_gold', name: 'Aura Dorée', price: 100, type: 'frame', style: 'box-shadow: 0 0 10px #d4af37; border: 2px solid #d4af37;' },
-    { id: 'f_rgb', name: 'Chroma RGB', price: 250, type: 'frame', style: 'animation: rgb-anim 2s linear infinite; border: 2px solid;' },
-    { id: 'b_vip', name: 'Salon VIP', price: 300, type: 'banner', url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800' }
+    { id: 'f_rgb', name: 'Chroma RGB', price: 250, type: 'frame', style: 'animation: rgb-anim 2s linear infinite; border: 2px solid;' }
 ];
 
 function getRank(lvl) {
     if (lvl >= 50) return { n: "👑 EMPEREUR", c: "#ff0000" };
-    if (lvl >= 30) return { n: "🟠 Comte", c: "#ffaa00" };
+    if (lvl >= 10) return { n: "🔵 Chevalier", c: "#00aaff" };
     return { n: "🟢 Roturier", c: "#00ff00" };
 }
 
@@ -31,111 +28,106 @@ app.get("/", (req, res) => {
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Royal Palace V7 - L'Empire</title>
+    <title>Royal Palace V8 - Souveraineté</title>
     <style>
-        :root { --gold: linear-gradient(135deg, #e6c27a 0%, #ffe5a3 50%, #c59b3d 100%); --gold-s: #d4af37; --bg: #050505; --card: #111; }
+        :root { --gold: linear-gradient(135deg, #e6c27a 0%, #ffe5a3 50%, #c59b3d 100%); --gold-s: #d4af37; --bg: #050505; }
         body, html { margin:0; padding:0; font-family:'Segoe UI', sans-serif; background:var(--bg); color:white; height:100vh; overflow:hidden; }
         
         #auth-screen { position:fixed; inset:0; z-index:9999; background:var(--bg); display:flex; align-items:center; justify-content:center; }
-        .auth-box { background:var(--card); padding:40px; border-radius:20px; border:1px solid var(--gold-s); width:300px; text-align:center; }
+        .auth-box { background:#111; padding:40px; border-radius:20px; border:1px solid var(--gold-s); width:300px; text-align:center; }
         
         #app { display:flex; height:100vh; width:100vw; }
-        #sidebar { width:280px; background:#0a0a0a; border-right:1px solid #222; display:flex; flex-direction:column; }
+        #sidebar { width:280px; background:#0d0d0d; border-right:1px solid #222; display:flex; flex-direction:column; }
         
-        .nav-item { padding:12px 20px; cursor:pointer; opacity:0.6; display:flex; align-items:center; gap:10px; transition:0.2s; }
+        .nav-item { padding:12px 20px; cursor:pointer; opacity:0.6; display:flex; align-items:center; justify-content:space-between; transition:0.2s; }
         .nav-item.active { opacity:1; background:rgba(212,175,55,0.1); border-left:3px solid var(--gold-s); }
-        .section-label { font-size:0.65rem; color:#444; padding:20px 20px 5px; text-transform:uppercase; font-weight:bold; }
+        .notif-badge { width:8px; height:8px; background:var(--gold-s); border-radius:50%; box-shadow: 0 0 8px var(--gold-s); }
 
         #main { flex:1; display:flex; flex-direction:column; background:#080808; }
-        #msgs { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:10px; }
+        #msgs { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:8px; }
         .msg { background:rgba(255,255,255,0.03); padding:10px 15px; border-radius:10px; max-width:80%; border-left:3px solid transparent; }
 
-        #call-bar { height:0; overflow:hidden; background:#000; transition:0.3s; position:relative; }
-        #call-bar.active { height:300px; }
-        .call-controls { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:10px; }
-
         .btn-royal { background:var(--gold); border:none; padding:10px 15px; border-radius:8px; font-weight:bold; cursor:pointer; }
-        .btn-icon { background:#222; color:white; border:none; width:40px; height:40px; border-radius:50%; cursor:pointer; }
-        .btn-icon.on { background:var(--gold-s); color:black; }
-
         input { background:#151515; border:1px solid #333; color:white; padding:12px; border-radius:8px; width:100%; box-sizing:border-box; }
-        .view { display:none; flex:1; flex-direction:column; }
-        .view.active { display:flex; }
         
-        @keyframes rgb-anim { 0% { border-color: red; } 33% { border-color: green; } 66% { border-color: blue; } 100% { border-color: red; } }
+        #notif-panel { position:absolute; bottom:80px; left:10px; right:10px; background:#1a1a1a; border:1px solid var(--gold-s); border-radius:10px; padding:12px; display:none; z-index:100; box-shadow:0 10px 30px rgba(0,0,0,0.5); }
+        
+        #call-bar { height:0; overflow:hidden; background:#000; transition:0.3s; position:relative; }
+        #call-bar.active { height:250px; }
     </style>
 </head>
 <body>
 
 <div id="auth-screen">
     <div class="auth-box">
-        <h2 style="color:var(--gold-s); letter-spacing:2px">ROYAL PALACE</h2>
+        <h2 style="color:var(--gold-s)">PALAIS ROYAL</h2>
         <input id="au" placeholder="Pseudo" style="margin-bottom:10px">
         <input id="ap" type="password" placeholder="Code" style="margin-bottom:20px">
-        <button class="btn-royal" style="width:100%" onclick="login()">SE CONNECTER</button>
+        <button class="btn-royal" style="width:100%" onclick="auth()">ENTRER</button>
     </div>
 </div>
 
 <div id="app">
     <div id="sidebar">
-        <div style="padding:25px; font-weight:bold; color:var(--gold-s)">⚜️ L'EMPIRE</div>
+        <div style="padding:25px; font-weight:bold; color:var(--gold-s); letter-spacing:1px;">⚜️ DYNASTIE V8</div>
         
         <div class="nav-item active" onclick="switchRoom('public', this)">🌍 Cour Publique</div>
         
-        <div class="section-label">Mes Groupes <button onclick="createGroup()" style="background:none; border:none; color:var(--gold-s); cursor:pointer">+</button></div>
+        <div style="font-size:0.65rem; color:#444; padding:20px 20px 5px; text-transform:uppercase;">Groupes <button onclick="createGrp()" style="background:none; border:none; color:var(--gold-s); cursor:pointer">+</button></div>
         <div id="group-list"></div>
 
-        <div class="section-label">Mes Amis</div>
+        <div style="font-size:0.65rem; color:#444; padding:20px 20px 5px; text-transform:uppercase;">Amis</div>
         <div id="friend-list"></div>
+        <div style="padding:10px 20px;"><button class="btn-royal" style="width:100%; font-size:0.7rem" onclick="addFriend()">+ AJOUTER AMI</button></div>
 
         <div style="flex:1"></div>
-        <div class="nav-item" onclick="showMarket()">🛒 Boutique Royale</div>
-        
-        <div id="user-footer" style="padding:20px; border-top:1px solid #222; background-size:cover;">
+        <div class="nav-item" onclick="showMarket()">🛒 Boutique</div>
+
+        <div id="notif-panel">
+            <div style="font-size:0.7rem; color:var(--gold-s); margin-bottom:10px; font-weight:bold;">DEMANDES EN ATTENTE</div>
+            <div id="notif-list"></div>
+        </div>
+
+        <div id="user-footer" style="padding:15px; border-top:1px solid #222; cursor:pointer;" onclick="toggleNotifs()">
             <div style="display:flex; align-items:center; gap:12px">
-                <div style="position:relative; width:45px; height:45px;">
+                <div style="position:relative; width:42px; height:42px;">
                     <img id="my-av" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
                     <div id="my-fr" style="position:absolute; inset:-4px; border-radius:50%; pointer-events:none;"></div>
                 </div>
-                <div>
-                    <div id="my-name" style="font-weight:bold; font-size:0.9rem">...</div>
+                <div style="flex:1">
+                    <div id="my-name" style="font-weight:bold; font-size:0.85rem">...</div>
                     <div id="my-gems" style="color:var(--gold-s); font-size:0.7rem">💎 0</div>
                 </div>
+                <div id="notif-dot" class="notif-badge" style="display:none"></div>
             </div>
         </div>
     </div>
 
     <div id="main">
-        <div id="view-chat" class="view active">
+        <div id="view-chat" class="view" style="display:flex; flex:1; flex-direction:column;">
             <div id="call-bar">
                 <video id="v-remote" autoplay style="width:100%; height:100%; object-fit:contain;"></video>
-                <div class="call-controls">
-                    <button id="btn-mic" class="btn-icon on" onclick="toggleMic()">🎤</button>
-                    <button id="btn-cam" class="btn-icon" onclick="toggleCam()">📷</button>
-                    <button class="btn-icon" onclick="startShare()">🖥️</button>
-                    <button class="btn-icon" style="background:red" onclick="endCall()">❌</button>
+                <div style="position:absolute; bottom:15px; left:50%; transform:translateX(-50%); display:flex; gap:10px;">
+                    <button id="mic-btn" class="btn-royal" onclick="toggleMic()">🎤 ON</button>
+                    <button class="btn-royal" style="background:red" onclick="endCall()">Terminer</button>
                 </div>
             </div>
-            
+
             <div style="padding:15px 25px; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:center;">
                 <h3 id="room-title" style="margin:0">Cour Publique</h3>
-                <button id="btn-call" class="btn-royal" style="display:none" onclick="startCall()">📞 Appel</button>
+                <button id="call-btn" class="btn-royal" style="display:none" onclick="startCall()">📞 Appel</button>
             </div>
-
             <div id="msgs"></div>
-
             <div style="padding:20px; display:flex; gap:10px; background:#0a0a0a">
-                <input id="msg-in" placeholder="Votre message..." onkeypress="if(event.key==='Enter') sendMsg()">
-                <button class="btn-royal" onclick="sendMsg()">➤</button>
+                <input id="msg-in" placeholder="Votre message..." onkeypress="if(event.key==='Enter') send()">
+                <button class="btn-royal" onclick="send()">➤</button>
             </div>
         </div>
 
-        <div id="view-market" class="view" style="padding:40px">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px">
-                <h2 style="color:var(--gold-s); margin:0">Marché de l'Empire</h2>
-                <button class="btn-royal" onclick="switchRoom('public')">Retour</button>
-            </div>
-            <div id="market-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:20px"></div>
+        <div id="view-market" class="view" style="display:none; padding:40px;">
+            <h2 style="color:var(--gold-s)">Boutique de Prestige</h2>
+            <div id="market-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:20px;"></div>
+            <button class="btn-royal" style="margin-top:30px" onclick="switchRoom('public')">Retour au Chat</button>
         </div>
     </div>
 </div>
@@ -145,79 +137,85 @@ app.get("/", (req, res) => {
     const socket = io();
     let me = null;
     let activeRoom = "public";
-    let localStream = null;
+    let stream = null;
 
     // --- AUTH ---
-    function login() {
+    function auth() {
         const u = document.getElementById('au').value, p = document.getElementById('ap').value;
         if(u && p) {
-            localStorage.setItem('royal_v7', JSON.stringify({u,p}));
+            localStorage.setItem('royal_v8', JSON.stringify({u,p}));
             socket.emit('login', {u,p});
         }
     }
-
-    const saved = localStorage.getItem('royal_v7');
+    const saved = localStorage.getItem('royal_v8');
     if(saved) socket.emit('login', JSON.parse(saved));
 
     socket.on('auth-success', u => {
-        me = u;
-        document.getElementById('auth-screen').style.display = 'none';
+        me = u; document.getElementById('auth-screen').style.display = 'none';
         updateUI();
-        switchRoom('public');
     });
 
-    // --- NAVIGATION & UI ---
+    // --- SOCIAL & UI ---
     function updateUI() {
         document.getElementById('my-name').innerText = me.u;
         document.getElementById('my-gems').innerText = "💎 " + me.gems;
         document.getElementById('my-av').src = me.avatar || 'https://ui-avatars.com/api/?name='+me.u;
         document.getElementById('my-fr').style = me.activeFrame || '';
-        document.getElementById('user-footer').style.backgroundImage = me.banner ? \`linear-gradient(rgba(0,0,0,0.8),rgba(0,0,0,0.8)), url(\${me.banner})\` : '';
 
-        // Listes
-        renderList('friend-list', me.friends, f => openPrivate(f));
-        renderList('group-list', me.groups, g => openGroup(g));
-    }
-
-    function renderList(id, items, cb) {
-        const el = document.getElementById(id); el.innerHTML = '';
-        items.forEach(it => {
+        // Amis
+        const fl = document.getElementById('friend-list'); fl.innerHTML = '';
+        me.friends.forEach(f => {
             const d = document.createElement('div');
-            d.className = 'nav-item';
-            d.innerText = it.name || it;
-            d.onclick = () => cb(it);
-            el.appendChild(d);
+            d.className = 'nav-item'; d.innerText = '👤 ' + f;
+            d.onclick = () => { activeRoom = [me.u, f].sort().join("-"); switchRoom(activeRoom); document.getElementById('room-title').innerText = f; };
+            fl.appendChild(d);
         });
-    }
 
-    function switchRoom(id, el) {
-        activeRoom = id;
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        document.getElementById('view-chat').classList.add('active');
-        document.getElementById('room-title').innerText = id === 'public' ? "Cour Publique" : id;
-        document.getElementById('btn-call').style.display = id === 'public' ? 'none' : 'block';
-        if(el) {
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            el.classList.add('active');
+        // Groupes
+        const gl = document.getElementById('group-list'); gl.innerHTML = '';
+        me.groups.forEach(g => {
+            const d = document.createElement('div');
+            d.className = 'nav-item'; d.innerText = '🛡️ ' + g;
+            d.onclick = () => { activeRoom = g; switchRoom(g); document.getElementById('room-title').innerText = g; };
+            gl.appendChild(d);
+        });
+
+        // Notifs
+        const nl = document.getElementById('notif-list'); nl.innerHTML = '';
+        if(me.requests.length > 0) {
+            document.getElementById('notif-dot').style.display = 'block';
+            me.requests.forEach(r => {
+                const d = document.createElement('div');
+                d.style = "display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;";
+                d.innerHTML = \`<span>\${r}</span> <div>
+                    <button class="btn-royal" style="padding:2px 8px" onclick="socket.emit('friend-answer', {from:'\${r}', accept:true})">✔</button>
+                    <button class="btn-royal" style="padding:2px 8px; background:red" onclick="socket.emit('friend-answer', {from:'\${r}', accept:false})">✘</button>
+                </div>\`;
+                nl.appendChild(d);
+            });
+        } else {
+            document.getElementById('notif-dot').style.display = 'none';
+            nl.innerHTML = '<div style="font-size:0.7rem; opacity:0.5">Aucune demande</div>';
         }
-        socket.emit('get-history', id);
     }
 
-    function openPrivate(name) { switchRoom([me.u, name].sort().join("-")); }
-    function openGroup(name) { switchRoom(name); }
-
-    function showMarket() {
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        document.getElementById('view-market').classList.add('active');
-        renderMarket();
-    }
+    function addFriend() { const p = prompt("Pseudo de l'ami :"); if(p) socket.emit('friend-request', p); }
+    function createGrp() { const n = prompt("Nom du groupe :"); if(n) socket.emit('create-group', n); }
+    function toggleNotifs() { const p = document.getElementById('notif-panel'); p.style.display = p.style.display === 'block' ? 'none' : 'block'; }
 
     // --- CHAT ---
-    function sendMsg() {
+    function switchRoom(room, el) {
+        activeRoom = room;
+        document.getElementById('view-market').style.display = 'none';
+        document.getElementById('view-chat').style.display = 'flex';
+        document.getElementById('call-btn').style.display = room === 'public' ? 'none' : 'block';
+        if(room === 'public') document.getElementById('room-title').innerText = "Cour Publique";
+        socket.emit('get-history', room);
+    }
+
+    function send() {
         const i = document.getElementById('msg-in');
-        if(!i.value) return;
-        socket.emit('msg', {room: activeRoom, txt: i.value});
-        i.value = '';
+        if(i.value) { socket.emit('msg', {room: activeRoom, txt: i.value}); i.value = ''; }
     }
 
     socket.on('chat-history', msgs => {
@@ -229,60 +227,42 @@ app.get("/", (req, res) => {
 
     function displayMsg(m) {
         const d = document.createElement('div');
-        d.className = 'msg';
-        d.style.borderLeftColor = m.rank.c;
-        d.innerHTML = \`<b style="color:\${m.rank.c}; font-size:0.7rem">\${m.rank.n}</b><br>
-                        <b>\${m.from}</b>: \${m.txt}\`;
-        const box = document.getElementById('msgs');
-        box.appendChild(d);
-        box.scrollTop = box.scrollHeight;
-    }
-
-    // --- APPEL & MEDIA ---
-    async function startCall() {
-        document.getElementById('call-bar').classList.add('active');
-        localStream = await navigator.mediaDevices.getUserMedia({audio: true, video: false});
-    }
-
-    function toggleMic() {
-        const audioTrack = localStream.getAudioTracks()[0];
-        audioTrack.enabled = !audioTrack.enabled;
-        document.getElementById('btn-mic').classList.toggle('on', audioTrack.enabled);
-    }
-
-    function toggleCam() {
-        alert("Caméra non gérée dans cette démo sans serveur WebRTC complet");
-    }
-
-    async function startShare() {
-        const stream = await navigator.mediaDevices.getDisplayMedia({video: {frameRate: 60}});
-        document.getElementById('v-remote').srcObject = stream;
-    }
-
-    function endCall() {
-        document.getElementById('call-bar').classList.remove('active');
-        if(localStream) localStream.getTracks().forEach(t => t.stop());
+        d.className = 'msg'; d.style.borderLeft = '3px solid ' + m.rank.c;
+        d.innerHTML = \`<b style="color:\${m.rank.c}; font-size:0.7rem">\${m.rank.n}</b><br><b>\${m.from}</b>: \${m.txt}\`;
+        document.getElementById('msgs').appendChild(d);
+        document.getElementById('msgs').scrollTop = document.getElementById('msgs').scrollHeight;
     }
 
     // --- MARKET ---
-    function renderMarket() {
+    function showMarket() {
+        document.getElementById('view-chat').style.display = 'none';
+        document.getElementById('view-market').style.display = 'block';
         const g = document.getElementById('market-grid'); g.innerHTML = '';
         ${JSON.stringify(MARKET_ITEMS)}.forEach(it => {
             const owned = me.inventory.includes(it.id);
             const d = document.createElement('div');
-            d.style = "background:#1a1a1a; padding:20px; border-radius:15px; text-align:center; border:1px solid #333";
-            d.innerHTML = \`<div style="height:50px; margin-bottom:15px; \${it.type==='frame'?it.style:''}">\${it.type==='banner'?'🖼️':''}</div>
-                            <div style="font-weight:bold">\${it.name}</div>
-                            <button class="btn-royal" style="width:100%; margin-top:15px" \${owned ? 'disabled' : ''} onclick="socket.emit('buy', '\${it.id}')">
-                                \${owned ? 'ACQUIS' : it.price + ' 💎'}
+            d.style = "background:#1a1a1a; padding:20px; border-radius:12px; text-align:center; border:1px solid #333";
+            d.innerHTML = \`<div style="height:40px; margin-bottom:10px; \${it.style}"></div>
+                            <div>\${it.name}</div>
+                            <button class="btn-royal" style="width:100%; margin-top:10px" \${owned?'disabled':''} onclick="socket.emit('buy','\${it.id}')">
+                                \${owned?'POSSÉDÉ':it.price+' 💎'}
                             </button>\`;
             g.appendChild(d);
         });
     }
 
-    function createGroup() {
-        const n = prompt("Nom du groupe :");
-        if(n) socket.emit('create-group', n);
+    // --- CALLS ---
+    async function startCall() {
+        document.getElementById('call-bar').classList.add('active');
+        stream = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+    }
+    function toggleMic() {
+        const t = stream.getAudioTracks()[0]; t.enabled = !t.enabled;
+        document.getElementById('mic-btn').innerText = t.enabled ? "🎤 ON" : "🎤 MUTE";
+    }
+    function endCall() {
+        document.getElementById('call-bar').classList.remove('active');
+        if(stream) stream.getTracks().forEach(t => t.stop());
     }
 
     socket.on('update-user', u => { me = u; updateUI(); });
@@ -296,15 +276,16 @@ app.get("/", (req, res) => {
 io.on("connection", (socket) => {
     socket.on('login', d => {
         let u = users.findOne({u: d.u});
-        if(!u) u = users.insert({ u: d.u, p: d.p, gems: 500, xp: 0, friends: [], groups: [], inventory: [], avatar: '', banner: '', activeFrame: '' });
+        if(!u) u = users.insert({ u: d.u, p: d.p, gems: 500, xp: 0, friends: [], requests: [], groups: [], inventory: [], avatar: '', activeFrame: '' });
         else if(u.p !== d.p) return;
         socket.user = u.u;
+        socket.join(u.u); // Pour les notifications privées
         socket.emit('auth-success', u);
     });
 
     socket.on('get-history', room => {
-        const history = messages.chain().find({room: room}).simplesort('ts').data();
-        socket.emit('chat-history', history);
+        const h = messages.chain().find({room: room}).simplesort('ts').data();
+        socket.emit('chat-history', h);
     });
 
     socket.on('msg', m => {
@@ -318,25 +299,43 @@ io.on("connection", (socket) => {
         socket.emit('update-user', u);
     });
 
-    socket.on('create-group', name => {
-        const u = users.findOne({u: socket.user});
-        if(u && !u.groups.includes(name)) {
-            u.groups.push(name);
-            users.update(u);
-            socket.emit('update-user', u);
+    // Diplomatie : Demande d'ami
+    socket.on('friend-request', name => {
+        const target = users.findOne({u: name});
+        if(target && name !== socket.user && !target.requests.includes(socket.user) && !target.friends.includes(socket.user)) {
+            target.requests.push(socket.user);
+            users.update(target);
+            io.to(name).emit('update-user', target);
         }
+    });
+
+    // Diplomatie : Réponse
+    socket.on('friend-answer', d => {
+        const me = users.findOne({u: socket.user});
+        const sender = users.findOne({u: d.from});
+        me.requests = me.requests.filter(r => r !== d.from);
+        if(d.accept && sender) {
+            if(!me.friends.includes(d.from)) me.friends.push(d.from);
+            if(!sender.friends.includes(socket.user)) sender.friends.push(socket.user);
+            users.update(sender);
+            io.to(d.from).emit('update-user', sender);
+        }
+        users.update(me);
+        socket.emit('update-user', me);
+    });
+
+    socket.on('create-group', n => {
+        const u = users.findOne({u: socket.user});
+        if(u && !u.groups.includes(n)) { u.groups.push(n); users.update(u); socket.emit('update-user', u); }
     });
 
     socket.on('buy', id => {
         const u = users.findOne({u: socket.user});
         const it = MARKET_ITEMS.find(i => i.id === id);
         if(u && it && u.gems >= it.price && !u.inventory.includes(id)) {
-            u.gems -= it.price;
-            u.inventory.push(id);
+            u.gems -= it.price; u.inventory.push(id);
             if(it.type === 'frame') u.activeFrame = it.style;
-            if(it.type === 'banner') u.banner = it.url;
-            users.update(u);
-            socket.emit('update-user', u);
+            users.update(u); socket.emit('update-user', u);
         }
     });
 });
