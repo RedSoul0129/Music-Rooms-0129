@@ -5,7 +5,8 @@ const loki = require("lokijs");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 1e7 }); // 10MB max pour les images
+// Limite augmentée pour accepter les images de bannières HD
+const io = new Server(server, { maxHttpBufferSize: 5e7 }); 
 
 // --- BASE DE DONNÉES ---
 const db = new loki("royal_palace.db", { autosave: true, autosaveInterval: 4000 });
@@ -16,8 +17,6 @@ let ytRooms = db.getCollection("ytRooms") || db.addCollection("ytRooms");
 
 const activeUsers = {}; 
 const userSockets = {}; 
-
-// Filtre anti-insultes basique
 const slurs = /motraciste1|motraciste2|insulte1|insulte2/gi; 
 
 app.get("/", (req, res) => {
@@ -27,70 +26,75 @@ app.get("/", (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Royal Elite - Ultimate</title>
+    <title>Royal Elite - Custom & Sync</title>
     <style>
         :root { --gold: linear-gradient(135deg, #e6c27a 0%, #ffe5a3 50%, #c59b3d 100%); --gold-s: #d4af37; --dark: #080808; --card: #151515; --text: #f1f1f1; --danger: #ff4444; }
         * { box-sizing: border-box; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
 
-        /* UI GÉNÉRALE */
         .btn-royal { background: var(--gold); color: black; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
         .btn-royal:active { transform: scale(0.95); }
         .btn-icon { background: transparent; border: 1px solid var(--gold-s); color: var(--gold-s); padding: 8px 12px; border-radius: 8px; cursor: pointer; }
         input { background: #111; border: 1px solid #333; color: white; padding: 12px; border-radius: 8px; width: 100%; margin-bottom: 10px; font-size: 16px; outline: none; }
         input:focus { border-color: var(--gold-s); }
 
-        /* SIDEBAR (Responsive) */
+        /* SIDEBAR */
         #sidebar { width: 300px; background: var(--card); border-right: 1px solid #222; display: flex; flex-direction: column; transition: transform 0.3s ease; z-index: 100; }
         .sidebar-header { padding: 20px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
         .sidebar-scroll { flex: 1; overflow-y: auto; padding: 15px; }
         .section-title { font-size: 0.7rem; color: #777; text-transform: uppercase; letter-spacing: 1px; margin: 15px 0 10px 5px; }
         
-        .list-item { padding: 10px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; margin-bottom: 5px; transition: 0.2s; }
-        .list-item:hover { background: rgba(212,175,55,0.05); }
-        .list-item.active { background: rgba(212,175,55,0.15); border-left: 3px solid var(--gold-s); }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #444; }
+        /* BANNIÈRES DANS LA LISTE */
+        .list-item { position: relative; padding: 10px; border-radius: 8px; cursor: pointer; margin-bottom: 5px; overflow: hidden; border: 1px solid transparent; }
+        .list-item:hover { border-color: var(--gold-s); }
+        .list-item-content { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; text-shadow: 1px 1px 3px black; font-weight: 500; }
+        
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #444; flex-shrink: 0; }
         .online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
-        .avatar { width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 1px solid #333; }
+        .avatar { width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 1px solid var(--gold-s); flex-shrink: 0; }
 
-        /* USER BAR */
-        #user-bar { background: #0a0a0a; padding: 15px; border-top: 1px solid #222; display: flex; align-items: center; gap: 10px; }
+        /* USER BAR (AVEC BANNIÈRE) */
+        #user-bar { position: relative; padding: 15px; border-top: 1px solid #222; display: flex; align-items: center; gap: 10px; background-size: cover; background-position: center; }
+        #user-bar::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.75); z-index: 0; }
+        #user-bar > * { position: relative; z-index: 1; }
 
-        /* MAIN AREA */
-        #main-content { flex: 1; display: flex; flex-direction: column; position: relative; min-width: 0; background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAOklEQVQYV2NkYGAwYkAD////ZwxlwE/iAAZ0xShK8CqEWYgsgKwQWR5dEFk+uhXYFME0EQyFSAuIBQClZhx7Z4nCgQAAAABJRU5ErkJggg==') repeat; }
-        #top-bar { padding: 15px 20px; background: rgba(21, 21, 21, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
+        /* CHAT (CORRIGÉ HORIZONTAL) */
+        #main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #top-bar { padding: 15px 20px; background: rgba(21, 21, 21, 0.95); border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
         #mobile-menu-btn { display: none; background: none; border: none; color: var(--gold-s); font-size: 1.5rem; cursor: pointer; }
 
-        /* CHAT */
         #chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         #messages-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .msg-row { display: flex; gap: 10px; }
+        
+        .msg-row { display: flex; align-items: flex-end; gap: 10px; width: 100%; }
         .msg-row.me { flex-direction: row-reverse; }
-        .msg-bubble { max-width: 75%; padding: 12px 15px; border-radius: 12px; background: #1a1a1a; word-wrap: break-word; font-size: 0.95rem; }
-        .msg-row.me .msg-bubble { background: var(--gold); color: black; }
-        .msg-author { font-size: 0.7rem; color: #888; margin-bottom: 5px; }
-        .msg-row.me .msg-author { text-align: right; color: #555; }
+        .msg-content-wrapper { display: flex; flex-direction: column; align-items: flex-start; max-width: 75%; }
+        .msg-row.me .msg-content-wrapper { align-items: flex-end; }
+        
+        .msg-bubble { 
+            padding: 10px 15px; border-radius: 12px; background: #1a1a1a; 
+            font-size: 0.95rem; white-space: pre-wrap; word-wrap: break-word; text-align: left;
+            display: inline-block; 
+        }
+        .msg-row.me .msg-bubble { background: var(--gold); color: black; border-bottom-right-radius: 2px; }
+        .msg-author { font-size: 0.7rem; color: #888; margin-bottom: 4px; padding: 0 5px; }
 
-        /* YOUTUBE ROOM & CALLS */
+        /* YT & CALLS */
         #yt-area, #call-area { display: none; flex: 1; flex-direction: column; background: #000; padding: 10px; }
-        .video-wrapper { position: relative; width: 100%; aspect-ratio: 16/9; background: #111; border: 1px solid var(--gold-s); border-radius: 8px; overflow: hidden; }
+        .video-wrapper { width: 100%; aspect-ratio: 16/9; background: #111; border: 1px solid var(--gold-s); border-radius: 8px; overflow: hidden; pointer-events: auto; }
         #yt-player { width: 100%; height: 100%; }
-        video { width: 100%; height: 100%; object-fit: contain; }
 
         /* MODALS */
         .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px); padding: 20px; }
         .modal.open { display: flex; }
-        .modal-box { background: var(--card); padding: 25px; border: 1px solid var(--gold-s); border-radius: 15px; width: 100%; max-width: 350px; text-align: center; }
-        
-        /* NOTIFS */
+        .modal-box { background: var(--card); padding: 25px; border: 1px solid var(--gold-s); border-radius: 15px; width: 100%; max-width: 350px; text-align: center; max-height: 90vh; overflow-y: auto; }
         .notif-badge { background: var(--danger); color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.6rem; font-weight: bold; }
 
-        /* MEDIA QUERIES (MOBILE) */
         @media (max-width: 768px) {
             #sidebar { position: fixed; height: 100%; transform: translateX(-100%); width: 85%; max-width: 320px; }
-            #sidebar.open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0,0,0,0.8); }
+            #sidebar.open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0,0,0,0.9); }
             #mobile-menu-btn { display: block; }
-            .msg-bubble { max-width: 85%; }
+            .msg-content-wrapper { max-width: 85%; }
         }
     </style>
 </head>
@@ -110,12 +114,19 @@ app.get("/", (req, res) => {
 
 <div id="settings-modal" class="modal">
     <div class="modal-box">
-        <h3 style="color:var(--gold-s)">PROFIL & RÉGLAGES</h3>
+        <h3 style="color:var(--gold-s); margin-top:0;">PARAMÈTRES</h3>
         <input id="set-u" placeholder="Nouveau Pseudo">
         <input id="set-p" type="password" placeholder="Nouveau Mot de passe">
-        <p style="text-align:left; font-size:0.8rem; color:#aaa">Changer d'icône (Image) :</p>
-        <input type="file" id="set-av" accept="image/*" style="font-size:0.8rem">
-        <button class="btn-royal" style="width:100%; margin-bottom:10px" onclick="saveSettings()">SAUVEGARDER</button>
+        
+        <h4 style="color:var(--gold-s); margin-top:15px; border-bottom:1px solid #333; padding-bottom:5px; text-align:left;">🎨 Customisation</h4>
+        
+        <p style="text-align:left; font-size:0.8rem; color:#aaa; margin:5px 0">Icône (Avatar) :</p>
+        <input type="file" id="set-av" accept="image/*" style="font-size:0.8rem; padding:8px; background:#222">
+        
+        <p style="text-align:left; font-size:0.8rem; color:#aaa; margin:5px 0">Bannière (Fond du nom) :</p>
+        <input type="file" id="set-banner" accept="image/*" style="font-size:0.8rem; padding:8px; background:#222">
+        
+        <button class="btn-royal" style="width:100%; margin-top:15px; margin-bottom:10px" onclick="saveSettings()">SAUVEGARDER</button>
         <button class="btn-icon" style="width:100%; border-color:#555; color:#aaa" onclick="closeModal('settings-modal')">ANNULER</button>
     </div>
 </div>
@@ -129,10 +140,13 @@ app.get("/", (req, res) => {
     <div class="sidebar-scroll">
         <div class="section-title">Demandes <span id="req-count" class="notif-badge" style="display:none">0</span></div>
         <div style="display:flex; gap:5px; margin-bottom:10px">
-            <input id="add-f-in" placeholder="Pseudo..." style="margin:0; padding:8px; font-size:0.8rem">
-            <button class="btn-royal" style="padding:8px" onclick="sendFriendReq()">+</button>
+            <input id="add-f-in" placeholder="Chercher un noble..." style="margin:0; padding:8px; font-size:0.8rem">
+            <button class="btn-royal" style="padding:8px" onclick="sendFriendReq('add-f-in')">+</button>
         </div>
         <div id="requests-list"></div>
+
+        <div class="section-title" id="suggestions-title" style="display:none">💡 Suggestions d'amis</div>
+        <div id="suggestions-list"></div>
 
         <div class="section-title">Amis</div>
         <div id="friends-list"></div>
@@ -140,17 +154,17 @@ app.get("/", (req, res) => {
         <div class="section-title">Groupes <button class="btn-icon" style="padding:2px 6px; font-size:0.7rem; float:right" onclick="createGroup()">+</button></div>
         <div id="groups-list"></div>
 
-        <div class="section-title">Salles YouTube <button class="btn-icon" style="padding:2px 6px; font-size:0.7rem; float:right" onclick="createYTRoom()">+</button></div>
+        <div class="section-title">Salles Vidéo <button class="btn-icon" style="padding:2px 6px; font-size:0.7rem; float:right" onclick="createYTRoom()">+</button></div>
         <div id="yt-rooms-list"></div>
     </div>
 
     <div id="user-bar">
-        <img id="my-avatar" class="avatar" src="https://ui-avatars.com/api/?name=?" onclick="openModal('settings-modal')">
+        <img id="my-avatar" class="avatar" src="" onclick="openModal('settings-modal')">
         <div style="flex:1; overflow:hidden">
-            <div id="my-name" style="font-weight:bold; font-size:0.9rem">...</div>
-            <div style="font-size:0.7rem; color:#22c55e">En ligne</div>
+            <div id="my-name" style="font-weight:bold; font-size:0.9rem; text-shadow:1px 1px 2px black;">...</div>
+            <div style="font-size:0.7rem; color:#22c55e; text-shadow:1px 1px 2px black;">En ligne</div>
         </div>
-        <button class="btn-icon" style="border:none" onclick="openModal('settings-modal')">⚙️</button>
+        <button class="btn-icon" style="border:none; text-shadow:1px 1px 2px black;" onclick="openModal('settings-modal')">⚙️</button>
     </div>
 </div>
 
@@ -161,36 +175,25 @@ app.get("/", (req, res) => {
             <h3 id="target-title" style="margin:0">Sélectionnez un chat</h3>
         </div>
         <div id="action-btns" style="display:none; gap:10px">
-            <button class="btn-icon" onclick="startCall('voice')">📞</button>
-            <button class="btn-icon" onclick="startCall('screen')">🖥️ 60FPS</button>
+            <button class="btn-icon" onclick="alert('Appel en cours de dev...')">📞</button>
+            <button class="btn-icon" onclick="alert('ScreenShare en cours de dev...')">🖥️ 60FPS</button>
         </div>
     </div>
 
     <div id="chat-area">
         <div id="messages-container"></div>
         <div id="input-area" style="padding:15px; background:rgba(0,0,0,0.5); display:flex; gap:10px; display:none">
-            <input id="chat-inp" placeholder="Message..." style="margin:0" onkeypress="if(event.key==='Enter') sendMsg()">
+            <input id="chat-inp" placeholder="Écrire un message..." style="margin:0" onkeypress="if(event.key==='Enter') sendMsg()">
             <button class="btn-royal" style="width:60px" onclick="sendMsg()">➤</button>
-        </div>
-    </div>
-
-    <div id="call-area">
-        <div class="video-wrapper">
-            <video id="remote-video" autoplay playsinline></video>
-        </div>
-        <div style="padding:15px; text-align:center">
-            <button class="btn-royal" style="background:var(--danger); color:white" onclick="endCall()">Raccrocher</button>
-            <button class="btn-icon" onclick="document.getElementById('remote-video').requestFullscreen()">Plein Écran</button>
         </div>
     </div>
 
     <div id="yt-area">
         <div class="video-wrapper"><div id="yt-player"></div></div>
         <div style="padding:15px; display:flex; gap:10px">
-            <input id="yt-url" placeholder="Lien YouTube..." style="margin:0">
-            <button class="btn-royal" onclick="addToYTQueue()">Ajouter à la file</button>
+            <input id="yt-url" placeholder="Collez le lien YouTube ici..." style="margin:0">
+            <button class="btn-royal" onclick="addToYT()">Lancer Syncro</button>
         </div>
-        <div id="yt-queue" style="padding:15px; color:#aaa; font-size:0.8rem"></div>
     </div>
 </div>
 
@@ -198,22 +201,17 @@ app.get("/", (req, res) => {
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
     const socket = io();
-    let myData = {}, activeTarget = null, targetType = 'user'; // user, group, yt
+    let myData = {}, activeTarget = null, targetType = 'user'; 
     let isLogin = true;
 
-    // --- RESPONSIVE MOBILE ---
     function toggleSidebar() {
         document.getElementById('sidebar').classList.toggle('open');
-        if(window.innerWidth <= 768) {
-            document.getElementById('close-mobile-btn').style.display = 'block';
-        }
+        if(window.innerWidth <= 768) document.getElementById('close-mobile-btn').style.display = 'block';
     }
 
-    // --- MODALS ---
     function openModal(id) { document.getElementById(id).classList.add('open'); }
     function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-    // --- AUTHENTIFICATION ---
     function toggleAuth() {
         isLogin = !isLogin;
         document.getElementById('auth-title').innerText = isLogin ? "PALAIS ROYAL" : "CRÉER UN TITRE";
@@ -231,73 +229,115 @@ app.get("/", (req, res) => {
         myData = u;
         document.getElementById('my-name').innerText = u.name;
         document.getElementById('my-avatar').src = u.avatar || 'https://ui-avatars.com/api/?name='+u.name;
+        
+        // Applique la bannière sur TON profil en bas à gauche
+        if(u.banner) {
+            document.getElementById('user-bar').style.backgroundImage = \`linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(\${u.banner})\`;
+        } else {
+            document.getElementById('user-bar').style.backgroundImage = 'none';
+        }
+
         closeModal('auth-modal');
-        socket.emit('get-init-data'); // Récupère amis, requêtes, groupes
+        socket.emit('get-init-data'); 
     });
     socket.on('auth-error', alert);
 
-    // --- PROFIL ---
-    function saveSettings() {
-        const u = document.getElementById('set-u').value;
-        const p = document.getElementById('set-p').value;
-        const f = document.getElementById('set-av').files[0];
-        const process = (av) => { socket.emit('update-profile', { name: u, pass: p, avatar: av }); closeModal('settings-modal'); };
-        if(f) { const r = new FileReader(); r.onload = () => process(r.result); r.readAsDataURL(f); } else process(null);
+    // --- BASE 64 POUR IMAGES (AVATAR & BANNIÈRE) ---
+    async function getBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+            reader.readAsDataURL(file);
+        });
     }
 
-    // --- AMIS & DEMANDES (CORRIGÉ SANS CONFIRM) ---
-    function sendFriendReq() {
-        const t = document.getElementById('add-f-in').value.trim();
+    async function saveSettings() {
+        const u = document.getElementById('set-u').value;
+        const p = document.getElementById('set-p').value;
+        const avFile = document.getElementById('set-av').files[0];
+        const banFile = document.getElementById('set-banner').files[0];
+        
+        let avatar = null, banner = null;
+        if(avFile) avatar = await getBase64(avFile);
+        if(banFile) banner = await getBase64(banFile);
+        
+        socket.emit('update-profile', { name: u, pass: p, avatar, banner });
+        closeModal('settings-modal');
+    }
+
+    // --- REQUÊTES ET SUGGESTIONS ---
+    function sendFriendReq(inputId) {
+        const t = document.getElementById(inputId).value.trim();
         if(t && t !== myData.name) socket.emit('send-request', t);
-        document.getElementById('add-f-in').value = '';
+        if(document.getElementById(inputId)) document.getElementById(inputId).value = '';
+    }
+
+    function quickAdd(name) {
+        socket.emit('send-request', name);
     }
 
     socket.on('init-data', d => {
-        // MAJ Requêtes
-        const reqList = document.getElementById('requests-list');
-        reqList.innerHTML = '';
+        // Demandes
+        const reqList = document.getElementById('requests-list'); reqList.innerHTML = '';
         const badge = document.getElementById('req-count');
         badge.style.display = d.requests.length > 0 ? 'inline-block' : 'none';
         badge.innerText = d.requests.length;
-
         d.requests.forEach(req => {
             const div = document.createElement('div'); div.className = 'list-item'; div.style.fontSize = '0.8rem';
-            div.innerHTML = \`<span>\${req}</span> <button class="btn-royal" style="padding:4px 8px; margin-left:auto" onclick="socket.emit('accept-request', '\${req}')">✔</button>\`;
+            div.innerHTML = \`<div class="list-item-content"><span>\${req}</span> <button class="btn-royal" style="padding:4px 8px; margin-left:auto" onclick="socket.emit('accept-request', '\${req}')">✔</button></div>\`;
             reqList.appendChild(div);
         });
 
-        // MAJ Amis
+        // Suggestions (Amis Mutuels)
+        const sugList = document.getElementById('suggestions-list'); sugList.innerHTML = '';
+        const sugTitle = document.getElementById('suggestions-title');
+        sugTitle.style.display = d.suggestions.length > 0 ? 'block' : 'none';
+        d.suggestions.forEach(sug => {
+            const div = document.createElement('div'); div.className = 'list-item'; div.style.fontSize = '0.8rem';
+            div.innerHTML = \`<div class="list-item-content"><span style="color:#aaa">\${sug}</span> <button class="btn-icon" style="padding:2px 6px; font-size:0.7rem; margin-left:auto" onclick="quickAdd('\${sug}')">+ Ajouter</button></div>\`;
+            sugList.appendChild(div);
+        });
+
+        // Amis (AVEC BANNIÈRES)
         const fList = document.getElementById('friends-list'); fList.innerHTML = '';
         d.friends.forEach(f => {
             const div = document.createElement('div'); div.className = 'list-item';
-            div.innerHTML = \`<img src="\${f.avatar || 'https://ui-avatars.com/api/?name='+f.name}" class="avatar" style="width:25px;height:25px"> <div class="status-dot \${f.online?'online':''}"></div> \${f.name}\`;
+            
+            // Ajout visuel de la bannière derrière le nom de l'ami
+            if(f.banner) {
+                div.style.backgroundImage = \`linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(\${f.banner})\`;
+                div.style.backgroundSize = 'cover';
+                div.style.backgroundPosition = 'center';
+            }
+            
+            div.innerHTML = \`<div class="list-item-content"><img src="\${f.avatar || 'https://ui-avatars.com/api/?name='+f.name}" class="avatar" style="width:25px;height:25px"> <div class="status-dot \${f.online?'online':''}"></div> <span>\${f.name}</span></div>\`;
             div.onclick = () => switchView('user', f.name);
             fList.appendChild(div);
         });
 
-        // MAJ Groupes & Salles
         const gList = document.getElementById('groups-list'); gList.innerHTML = '';
         d.groups.forEach(g => {
-            const div = document.createElement('div'); div.className = 'list-item'; div.innerHTML = '👥 ' + g.name;
+            const div = document.createElement('div'); div.className = 'list-item'; div.innerHTML = '<div class="list-item-content">👥 ' + g.name + '</div>';
             div.onclick = () => switchView('group', g.name);
             gList.appendChild(div);
         });
 
         const yList = document.getElementById('yt-rooms-list'); yList.innerHTML = '';
         d.ytRooms.forEach(y => {
-            const div = document.createElement('div'); div.className = 'list-item'; div.innerHTML = '🎬 ' + y;
+            const div = document.createElement('div'); div.className = 'list-item'; div.innerHTML = '<div class="list-item-content">🎬 ' + y + '</div>';
             div.onclick = () => switchView('yt', y);
             yList.appendChild(div);
         });
     });
 
-    // --- NAVIGATION ---
+    // --- NAV ---
     function switchView(type, target) {
         activeTarget = target; targetType = type;
         document.getElementById('target-title').innerText = target;
         document.getElementById('action-btns').style.display = type === 'yt' ? 'none' : 'flex';
         
-        ['chat-area', 'call-area', 'yt-area'].forEach(id => document.getElementById(id).style.display = 'none');
+        ['chat-area', 'yt-area'].forEach(id => document.getElementById(id).style.display = 'none');
         
         if(type === 'yt') {
             document.getElementById('yt-area').style.display = 'flex';
@@ -310,7 +350,7 @@ app.get("/", (req, res) => {
         if(window.innerWidth <= 768) toggleSidebar();
     }
 
-    // --- CHAT & ANTI-SLUR CLIENT SIDE VISUAL ---
+    // --- CHAT HORIZONTAL ---
     function sendMsg() {
         const i = document.getElementById('chat-inp');
         if(!i.value) return;
@@ -333,68 +373,74 @@ app.get("/", (req, res) => {
     function appendMsg(m) {
         const isMe = m.from === myData.name;
         const c = document.getElementById('messages-container');
-        const r = document.createElement('div'); r.className = 'msg-row ' + (isMe ? 'me' : '');
+        const r = document.createElement('div'); 
+        r.className = 'msg-row ' + (isMe ? 'me' : '');
+        
         r.innerHTML = \`<img src="\${m.avatar || 'https://ui-avatars.com/api/?name='+m.from}" class="avatar">
-                       <div><div class="msg-author">\${m.from}</div><div class="msg-bubble">\${m.text}</div></div>\`;
-        c.appendChild(r); c.scrollTop = c.scrollHeight;
+                       <div class="msg-content-wrapper">
+                           <div class="msg-author">\${m.from}</div>
+                           <div class="msg-bubble">\${m.text}</div>
+                       </div>\`;
+        c.appendChild(r); 
+        c.scrollTop = c.scrollHeight;
     }
 
     // --- CREATIONS ---
-    function createGroup() {
-        const n = prompt("Nom du groupe ?");
-        if(n) socket.emit('create-group', n);
-    }
-    function createYTRoom() {
-        const n = prompt("Nom de la salle de projection ?");
-        if(n) socket.emit('create-yt-room', n);
-    }
+    function createGroup() { const n = prompt("Nom du groupe ?"); if(n) socket.emit('create-group', n); }
+    function createYTRoom() { const n = prompt("Nom de la salle vidéo ?"); if(n) socket.emit('create-yt-room', n); }
 
-    // --- YOUTUBE SYNC ---
+    // --- YOUTUBE SYNCRO ROBUSTE (PLAY/PAUSE/SEEK) ---
     let player, ytSyncing = false;
-    function onYouTubeIframeAPIReady() { player = new YT.Player('yt-player', { events: { 'onStateChange': onPlayerStateChange }}); }
+    function onYouTubeIframeAPIReady() { 
+        player = new YT.Player('yt-player', { 
+            events: { 'onStateChange': onPlayerStateChange }
+        }); 
+    }
     
-    function addToYTQueue() {
+    function addToYT() {
         const url = document.getElementById('yt-url').value;
         const id = url.split('v=')[1]?.split('&')[0];
-        if(id) { socket.emit('yt-action', { room: activeTarget, action: 'add', id }); document.getElementById('yt-url').value = ''; }
-    }
-
-    function onPlayerStateChange(e) {
-        if(ytSyncing) return;
-        socket.emit('yt-action', { room: activeTarget, action: 'sync', state: e.data, time: player.getCurrentTime() });
-    }
-
-    socket.on('yt-sync', d => {
-        ytSyncing = true;
-        if(d.action === 'add' || d.action === 'load') player.loadVideoById(d.id);
-        if(d.action === 'sync') {
-            if(d.state === 1) player.playVideo(); else if(d.state === 2) player.pauseVideo();
-            if(Math.abs(player.getCurrentTime() - d.time) > 2) player.seekTo(d.time);
+        if(id) { 
+            socket.emit('yt-action', { room: activeTarget, action: 'load', id }); 
+            document.getElementById('yt-url').value = ''; 
         }
-        setTimeout(() => ytSyncing = false, 500);
+    }
+
+    // Détecte quand TOI tu cliques sur le lecteur (pause, play, avance rapide)
+    function onPlayerStateChange(e) {
+        if(ytSyncing) return; // Évite que les signaux du serveur ne fassent une boucle infinie
+        if(e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.PAUSED) {
+            socket.emit('yt-action', { 
+                room: activeTarget, 
+                action: 'sync', 
+                state: e.data, 
+                time: player.getCurrentTime() 
+            });
+        }
+    }
+
+    // Reçoit le signal des autres
+    socket.on('yt-sync', d => {
+        ytSyncing = true; // On bloque notre propre envoi le temps d'appliquer le changement
+        
+        if(d.action === 'load') {
+            player.loadVideoById(d.id);
+        }
+        
+        if(d.action === 'sync') {
+            const myTime = player.getCurrentTime();
+            // Si le temps de l'autre est très différent (quelqu'un a avancé la vidéo)
+            if(Math.abs(myTime - d.time) > 1.5) player.seekTo(d.time, true);
+            
+            // Syncro de l'état (1=Play, 2=Pause)
+            if(d.state === 1) player.playVideo(); 
+            else if(d.state === 2) player.pauseVideo();
+        }
+        
+        // On libère le verrou après l'exécution
+        setTimeout(() => ytSyncing = false, 800);
     });
 
-    // --- WEBRTC (Screen & Voice 1v1 Base) ---
-    let localStream, pc;
-    async function startCall(mode) {
-        document.getElementById('chat-area').style.display = 'none';
-        document.getElementById('call-area').style.display = 'flex';
-        
-        if(mode === 'screen') {
-            localStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 60 } }, audio: true });
-        } else {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        }
-        // Logique WebRTC simplifiée pour l'exemple
-        document.getElementById('remote-video').srcObject = localStream; // Auto-retour visuel pour l'instant
-        socket.emit('call-request', { target: activeTarget, mode });
-    }
-
-    function endCall() {
-        if(localStream) localStream.getTracks().forEach(t => t.stop());
-        document.getElementById('call-area').style.display = 'none';
-        document.getElementById('chat-area').style.display = 'flex';
-    }
 </script>
 </body>
 </html>
@@ -405,23 +451,23 @@ app.get("/", (req, res) => {
 io.on("connection", (socket) => {
     socket.on('register', (d) => {
         if(users.findOne({u: d.u})) return socket.emit('auth-error', 'Nom pris');
-        const u = users.insert({ u: d.u, p: d.p, avatar: '', friends: [], requests: [] });
+        // Ajout du champ banner
+        const u = users.insert({ u: d.u, p: d.p, avatar: '', banner: '', friends: [], requests: [] });
         loginOk(socket, u);
     });
 
     socket.on('login', (d) => {
         const u = users.findOne({ u: d.u, p: d.p });
-        if(u) loginOk(socket, u); else socket.emit('auth-error', 'Erreur identifiants');
+        if(u) loginOk(socket, u); else socket.emit('auth-error', 'Identifiants invalides');
     });
 
     function loginOk(s, u) {
         activeUsers[s.id] = u.u; userSockets[u.u] = s.id;
-        s.emit('auth-success', { name: u.u, avatar: u.avatar });
+        s.emit('auth-success', { name: u.u, avatar: u.avatar, banner: u.banner });
     }
 
     socket.on('get-init-data', () => refreshUser(socket));
 
-    // AMIS CORRIGÉ
     socket.on('send-request', t => {
         const them = users.findOne({u: t});
         const me = activeUsers[socket.id];
@@ -440,10 +486,10 @@ io.on("connection", (socket) => {
         refreshUser(socket); if(userSockets[f]) refreshUser(io.sockets.sockets.get(userSockets[f]));
     });
 
-    // CHAT & ANTI SLUR
+    // Filtre et envoi de message
     socket.on('send-msg', d => {
         const me = users.findOne({u: activeUsers[socket.id]});
-        let cleanText = d.text.replace(slurs, "***"); // Filtre activé
+        let cleanText = d.text.replace(slurs, "***"); 
         
         const msg = { from: me.u, avatar: me.avatar, text: cleanText, target: d.target, time: Date.now() };
         messages.insert(msg);
@@ -468,33 +514,57 @@ io.on("connection", (socket) => {
         }
     });
 
-    // GROUPES & YT
-    socket.on('create-group', n => {
-        if(!groups.findOne({name: n})) { groups.insert({name: n, members: [activeUsers[socket.id]]}); refreshAll(); }
-    });
-    socket.on('create-yt-room', n => {
-        if(!ytRooms.findOne({name: n})) { ytRooms.insert({name: n, queue: []}); refreshAll(); }
-    });
-
+    socket.on('create-group', n => { if(!groups.findOne({name: n})) { groups.insert({name: n, members: [activeUsers[socket.id]]}); refreshAll(); } });
+    socket.on('create-yt-room', n => { if(!ytRooms.findOne({name: n})) { ytRooms.insert({name: n, queue: []}); refreshAll(); } });
+    
     socket.on('join-yt-room', r => socket.join('yt_'+r));
-    socket.on('yt-action', d => io.to('yt_'+d.room).emit('yt-sync', d));
+    socket.on('yt-action', d => io.to('yt_'+d.room).emit('yt-sync', d)); // Relais du signal Play/Pause
 
-    // PROFIL
+    // PROFIL AVEC BANNIÈRE
     socket.on('update-profile', d => {
         const u = users.findOne({u: activeUsers[socket.id]});
         if(d.name) { delete userSockets[u.u]; u.u = d.name; userSockets[u.u] = socket.id; activeUsers[socket.id] = u.u; }
-        if(d.pass) u.p = d.pass; if(d.avatar) u.avatar = d.avatar;
-        users.update(u); socket.emit('auth-success', { name: u.u, avatar: u.avatar }); refreshAll();
+        if(d.pass) u.p = d.pass; 
+        if(d.avatar) u.avatar = d.avatar;
+        if(d.banner) u.banner = d.banner; // Sauvegarde la bannière
+        users.update(u); 
+        socket.emit('auth-success', { name: u.u, avatar: u.avatar, banner: u.banner }); 
+        refreshAll();
     });
 
     function refreshUser(s) {
         if(!s) return;
         const u = users.findOne({u: activeUsers[s.id]});
         if(u) {
-            const fData = u.friends.map(f => { const fu = users.findOne({u:f}); return { name: f, online: !!userSockets[f], avatar: fu?fu.avatar:'' }; });
+            // Amis avec infos bannières
+            const fData = u.friends.map(f => { 
+                const fu = users.findOne({u:f}); 
+                return { name: f, online: !!userSockets[f], avatar: fu?fu.avatar:'', banner: fu?fu.banner:'' }; 
+            });
+            
+            // Calcul des suggestions d'amis mutuels
+            let suggestions = new Set();
+            u.friends.forEach(f => {
+                const fu = users.findOne({u: f});
+                if(fu) {
+                    fu.friends.forEach(mutual => {
+                        if(mutual !== u.u && !u.friends.includes(mutual) && !u.requests.includes(mutual)) {
+                            suggestions.add(mutual);
+                        }
+                    });
+                }
+            });
+
             const gData = groups.find().filter(g => g.members.includes(u.u));
             const yData = ytRooms.find().map(y => y.name);
-            s.emit('init-data', { friends: fData, requests: u.requests, groups: gData, ytRooms: yData });
+            
+            s.emit('init-data', { 
+                friends: fData, 
+                requests: u.requests, 
+                suggestions: Array.from(suggestions), // Envoi des suggestions au client
+                groups: gData, 
+                ytRooms: yData 
+            });
         }
     }
 
