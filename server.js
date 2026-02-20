@@ -10,14 +10,20 @@ const io = new Server(server, { maxHttpBufferSize: 5e7 });
 // --- BASE DE DONNÉES ---
 const db = new loki("royal_palace.db", { autosave: true, autosaveInterval: 4000 });
 let users = db.getCollection("users") || db.addCollection("users");
-let messages = db.getCollection("messages") || db.addCollection("messages");
+let groups = db.getCollection("groups") || db.addCollection("groups");
 
-// --- CONFIG DU SHOP ---
 const MARKET_ITEMS = [
-    { id: 'frame_gold', name: 'Aura Dorée', price: 100, type: 'frame', style: 'box-shadow: 0 0 10px #d4af37, inset 0 0 5px #d4af37; border: 2px solid #d4af37;' },
-    { id: 'frame_rgb', name: 'Chroma RGB', price: 250, type: 'frame', style: 'animation: rgb-anim 2s linear infinite; border: 2px solid;' },
-    { id: 'banner_royal', name: 'Bannière Royale', price: 50, type: 'banner', url: 'https://images.unsplash.com/photo-1519751138087-5bf79df62d5b?w=500' }
+    { id: 'f_gold', name: 'Aura Dorée', price: 100, type: 'frame', style: 'box-shadow: 0 0 10px #d4af37; border: 2px solid #d4af37;' },
+    { id: 'f_rgb', name: 'Chroma RGB', price: 250, type: 'frame', style: 'animation: rgb-anim 2s linear infinite; border: 2px solid;' },
+    { id: 'b_castle', name: 'Donjon Noir', price: 150, type: 'banner', url: 'https://images.unsplash.com/photo-1505832018823-50331d70d237?w=800' }
 ];
+
+function getRank(lvl) {
+    if (lvl >= 50) return { n: "👑 EMPEREUR", c: "#ff0000" };
+    if (lvl >= 30) return { n: "🟠 Comte", c: "#ffaa00" };
+    if (lvl >= 10) return { n: "🔵 Chevalier", c: "#00aaff" };
+    return { n: "🟢 Roturier", c: "#00ff00" };
+}
 
 app.get("/", (req, res) => {
   res.send(`
@@ -25,126 +31,122 @@ app.get("/", (req, res) => {
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Royal Palace - Connexion Stable</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Royal Palace V4 - Social</title>
     <style>
-        :root { --gold: linear-gradient(135deg, #e6c27a 0%, #ffe5a3 50%, #c59b3d 100%); --gold-s: #d4af37; --dark: #0a0a0a; --card: #151515; --text: #f1f1f1; }
-        
+        :root { --gold: linear-gradient(135deg, #e6c27a 0%, #ffe5a3 50%, #c59b3d 100%); --gold-s: #d4af37; --dark: #0a0a0a; --card: #151515; }
         @keyframes rgb-anim { 0% { border-color: red; } 33% { border-color: green; } 66% { border-color: blue; } 100% { border-color: red; } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
-        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        @keyframes adProgress { from { width: 0%; } to { width: 100%; } }
         
-        /* MODAL CONNEXION */
-        #auth-overlay { position: fixed; inset: 0; background: var(--dark); z-index: 9999; display: flex; align-items: center; justify-content: center; }
-        .auth-box { background: var(--card); padding: 30px; border-radius: 15px; border: 1px solid var(--gold-s); text-align: center; width: 300px; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* SIDEBAR */
+        #sidebar { width: 260px; background: var(--card); border-right: 1px solid #222; display: flex; flex-direction: column; }
+        .nav-link { padding: 12px 20px; cursor: pointer; opacity: 0.6; font-size: 0.9rem; transition: 0.2s; }
+        .nav-link.active { opacity: 1; color: var(--gold-s); border-left: 3px solid var(--gold-s); background: rgba(255,255,255,0.02); }
+        .section-title { font-size: 0.7rem; color: #555; padding: 20px 20px 5px; text-transform: uppercase; font-weight: bold; }
 
-        /* UI */
-        .btn-royal { background: var(--gold); color: black; padding: 10px 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .btn-royal:hover { transform: scale(1.02); }
-        input { background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 8px; width: 100%; margin-bottom: 10px; box-sizing: border-box; }
-
-        #sidebar { width: 280px; background: var(--card); border-right: 1px solid #222; display: flex; flex-direction: column; }
-        .nav-link { padding: 15px 20px; cursor: pointer; transition: 0.3s; font-weight: 500; opacity: 0.7; }
-        .nav-link.active { opacity: 1; color: var(--gold-s); background: rgba(255,255,255,0.03); border-left: 3px solid var(--gold-s); }
-
-        .view { display: none; flex: 1; animation: fadeIn 0.3s ease-out; flex-direction: column; }
+        /* VIEWS */
+        .view { display: none; flex: 1; flex-direction: column; background: #0d0d0d; }
         .view.active { display: flex; }
 
-        .gem-counter { background: rgba(0,0,0,0.4); border: 1px solid var(--gold-s); padding: 4px 12px; border-radius: 20px; color: var(--gold-s); font-size: 0.9rem; }
-        
-        /* CALL OVERLAY */
-        #call-ui { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 5000; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        #screen-view { width: 80%; border: 2px solid var(--gold-s); border-radius: 10px; background: #000; }
+        /* CHAT & CALL */
+        #msgs { flex: 1; overflow-y: auto; padding: 20px; }
+        .msg { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; background: #1a1a1a; width: fit-content; max-width: 80%; }
+        #call-area { height: 250px; background: #000; display: none; position: relative; border-bottom: 2px solid var(--gold-s); }
+        video { width: 100%; height: 100%; object-fit: contain; }
 
-        .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 20px; }
-        .item-card { background: #1a1a1a; padding: 15px; border-radius: 10px; text-align: center; border: 1px solid #333; }
+        /* AD MODAL */
+        #ad-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 10000; display: none; align-items: center; justify-content: center; }
+        .ad-content { background: var(--card); padding: 40px; border-radius: 20px; border: 1px solid var(--gold-s); text-align: center; width: 400px; }
+        .ad-bar { width: 100%; height: 8px; background: #333; border-radius: 4px; margin: 20px 0; overflow: hidden; }
+        .ad-fill { height: 100%; background: var(--gold); width: 0%; }
+        .ad-fill.active { animation: adProgress 5s linear forwards; }
+
+        /* UI ELEMENTS */
+        .btn-royal { background: var(--gold); border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-royal:disabled { background: #333; color: #777; cursor: not-allowed; }
+        input { background: #1a1a1a; border: 1px solid #333; color: white; padding: 10px; border-radius: 6px; }
+        .badge { font-size: 0.6rem; padding: 2px 5px; border-radius: 3px; font-weight: bold; margin-right: 5px; border: 1px solid; }
         
-        .avatar-container { position: relative; width: 45px; height: 45px; }
-        .frame-display { position: absolute; inset: -4px; border-radius: 50%; pointer-events: none; }
+        #user-profile-bar { padding: 15px; border-top: 1px solid #222; background-size: cover; background-position: center; }
     </style>
 </head>
 <body>
 
-<div id="auth-overlay">
-    <div class="auth-box">
-        <h2 style="color:var(--gold-s); margin-top:0">PALAIS ROYAL</h2>
-        <input id="login-u" placeholder="Nom de noble">
-        <input id="login-p" type="password" placeholder="Mot de passe">
-        <button class="btn-royal" style="width:100%" onclick="login()">ENTRER</button>
-    </div>
-</div>
-
-<div id="call-ui">
-    <video id="screen-view" autoplay playsinline></video>
-    <div style="margin-top:20px; display:flex; gap:10px">
-        <button id="mute-btn" class="btn-royal" onclick="toggleMute()">🎤 Micro ON</button>
-        <button class="btn-royal" onclick="shareScreen()">🖥️ Partage 60 FPS</button>
-        <button class="btn-royal" style="background:red; color:white" onclick="stopCall()">Quitter</button>
-    </div>
-</div>
-
-<div id="ad-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:10000; display:none; align-items:center; justify-content:center;">
-    <div class="auth-box" style="width:350px">
-        <h3 style="color:var(--gold-s)">ANNONCE DU PALAIS</h3>
-        <p>Le saviez-vous ? Plus vous parlez, plus vous gagnez en influence au Palais !</p>
-        <button class="btn-royal" onclick="finishAd()">Fermer et gagner 10 💎</button>
+<div id="ad-modal">
+    <div class="ad-content">
+        <h2 style="color:var(--gold-s)">ANNOUCO ROYALE</h2>
+        <p>Le Palais s'agrandit... patience, Noble.</p>
+        <div class="ad-bar"><div id="ad-fill" class="ad-fill"></div></div>
+        <button id="ad-close" class="btn-royal" style="display:none" onclick="finishAd()">Réclamer 10 💎</button>
     </div>
 </div>
 
 <div id="sidebar">
-    <div style="padding:20px; display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-weight:bold; color:var(--gold-s)">🔱 ELITE</span>
-        <div class="gem-counter">💎 <span id="gem-val">0</span></div>
-    </div>
+    <div style="padding:20px; color:var(--gold-s); font-weight:900; letter-spacing:2px">ROYAL V4</div>
     
-    <div class="nav-link active" onclick="switchTab('chat', this)">💬 Salon Noble</div>
-    <div class="nav-link" onclick="switchTab('market', this)">🛒 Marché Noir</div>
-    <div class="nav-link" onclick="switchTab('quests', this)">🎯 Défis</div>
-    
+    <div class="section-title">Principal</div>
+    <div class="nav-link active" onclick="switchTab('chat-public', this)">🌍 Cour Publique</div>
+    <div class="nav-link" onclick="switchTab('market', this)">🛒 Marché</div>
+    <div class="nav-link" onclick="switchTab('profile', this)">⚙️ Mon Profil</div>
+
+    <div class="section-title">Amis & Groupes</div>
+    <div id="friend-list"></div>
+    <div style="padding:10px 20px;"><button class="btn-royal" style="width:100%; font-size:0.7rem;" onclick="addFriend()">+ Ajouter Ami</button></div>
+
     <div style="flex:1"></div>
 
-    <div id="user-bar" style="padding:15px; border-top:1px solid #222; display:flex; align-items:center; gap:12px; background-size:cover;">
-        <div class="avatar-container">
-            <img id="my-avatar" src="" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
-            <div id="my-frame" class="frame-display"></div>
-        </div>
-        <div style="flex:1">
-            <div id="my-name" style="font-weight:bold; font-size:0.9rem">...</div>
-            <div style="font-size:0.7rem; color:#aaa; cursor:pointer" onclick="logout()">Se déconnecter</div>
+    <div id="user-profile-bar">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <div style="position:relative; width:40px; height:40px;">
+                <img id="my-av" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
+                <div id="my-fr" style="position:absolute; inset:-3px; border-radius:50%; pointer-events:none;"></div>
+            </div>
+            <div>
+                <div id="my-name" style="font-weight:bold; font-size:0.8rem">...</div>
+                <div id="my-gem" style="font-size:0.7rem; color:var(--gold-s)">💎 0</div>
+            </div>
         </div>
     </div>
 </div>
 
-<div id="main-content" style="flex:1; display:flex; flex-direction:column;">
-    <div id="tab-chat" class="view active">
-        <div style="padding:15px; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:center">
-            <h3 style="margin:0">Palais Général</h3>
-            <button class="btn-royal" onclick="startCallUI()">📞 Appel</button>
+<div id="main" style="flex:1; display:flex;">
+    <div id="view-chat" class="view active">
+        <div id="call-area">
+            <video id="remote-video" autoplay playsinline></video>
+            <div style="position:absolute; bottom:10px; right:10px; display:flex; gap:5px">
+                <button class="btn-royal" onclick="startScreenShare()">🖥️ Share 60FPS</button>
+                <button class="btn-royal" style="background:red" onclick="stopCall()">Quitter</button>
+            </div>
         </div>
-        <div id="msgs" style="flex:1; overflow-y:auto; padding:20px;"></div>
-        <div style="padding:15px; display:flex; gap:10px">
-            <input id="msg-in" placeholder="Votre message..." style="margin:0" onkeypress="if(event.key==='Enter') send()">
+        <div style="padding:15px; border-bottom:1px solid #222; display:flex; justify-content:space-between">
+            <h3 id="chat-title" style="margin:0">Cour Publique</h3>
+            <button id="call-btn" class="btn-royal" style="display:none" onclick="initiateCall()">📞 Appel Groupe</button>
+        </div>
+        <div id="msgs"></div>
+        <div style="padding:20px; display:flex; gap:10px; background:#111">
+            <input id="msg-in" style="flex:1" placeholder="Votre message..." onkeypress="if(event.key==='Enter') send()">
             <button class="btn-royal" onclick="send()">➤</button>
         </div>
     </div>
 
-    <div id="tab-market" class="view">
-        <h2 style="padding:20px; color:var(--gold-s); margin:0">Boutique de Cosmétiques</h2>
-        <div class="market-grid" id="market-list"></div>
+    <div id="view-market" class="view">
+        <h2 style="padding:20px; color:var(--gold-s)">Boutique Royale</h2>
+        <div id="market-items" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:15px; padding:20px"></div>
+        <div style="padding:20px; border-top:1px solid #222">
+            <button class="btn-royal" onclick="showAd()">Voir une annonce (+10 💎)</button>
+        </div>
     </div>
 
-    <div id="tab-quests" class="view">
-        <h2 style="padding:20px; color:var(--gold-s); margin:0">Quêtes Quotidiennes</h2>
-        <div style="padding:20px">
-            <div class="item-card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-                <div style="text-align:left"><b>Bonus Quotidien</b><br><small>+50 Gemmes par jour</small></div>
-                <button class="btn-royal" onclick="socket.emit('claim-daily')">Réclamer</button>
-            </div>
-            <div class="item-card" style="display:flex; justify-content:space-between; align-items:center">
-                <div style="text-align:left"><b>Regarder l'annonce</b><br><small>Soutien au Palais</small></div>
-                <button class="btn-royal" onclick="document.getElementById('ad-modal').style.display='flex'">Voir (+10 💎)</button>
-            </div>
+    <div id="view-profile" class="view">
+        <h2 style="padding:20px; color:var(--gold-s)">Personnalisation</h2>
+        <div style="padding:20px; display:flex; flex-direction:column; gap:15px; max-width:400px">
+            <label>Lien Avatar (URL image)</label>
+            <input id="set-av" placeholder="https://...">
+            <label>Lien Bannière (URL image)</label>
+            <input id="set-ba" placeholder="https://...">
+            <button class="btn-royal" onclick="saveProfile()">Enregistrer les modifications</button>
         </div>
     </div>
 </div>
@@ -152,154 +154,207 @@ app.get("/", (req, res) => {
 <script src="/socket.io/socket.io.js"></script>
 <script>
     const socket = io();
-    let localStream;
+    let currentUser = null;
+    let activeRoom = "public";
 
-    // --- GESTION CONNEXION ---
-    window.onload = () => {
-        const saved = localStorage.getItem('royal_session');
-        if(saved) {
-            const {u, p} = JSON.parse(saved);
-            socket.emit('login', {u, p});
-        }
-    };
-
-    function login() {
-        const u = document.getElementById('login-u').value;
-        const p = document.getElementById('login-p').value;
-        if(!u || !p) return alert("Remplis tout !");
-        localStorage.setItem('royal_session', JSON.stringify({u, p}));
-        socket.emit('login', {u, p});
+    // --- AUTH & INITIALISATION ---
+    const saved = localStorage.getItem('royal_v4');
+    if(saved) socket.emit('login', JSON.parse(saved));
+    else {
+        const u = prompt("Pseudo :"), p = prompt("Mdp :");
+        if(u && p) { localStorage.setItem('royal_v4', JSON.stringify({u,p})); socket.emit('login', {u,p}); }
     }
 
-    function logout() {
-        localStorage.removeItem('royal_session');
-        location.reload();
+    socket.on('auth-success', u => { currentUser = u; updateUI(); });
+    socket.on('update-user', u => { currentUser = u; updateUI(); });
+
+    function updateUI() {
+        document.getElementById('my-name').innerText = currentUser.u;
+        document.getElementById('my-gem').innerText = "💎 " + currentUser.gems;
+        document.getElementById('my-av').src = currentUser.avatar || 'https://ui-avatars.com/api/?name='+currentUser.u;
+        document.getElementById('my-fr').style = currentUser.activeFrame || '';
+        document.getElementById('user-profile-bar').style.backgroundImage = currentUser.banner ? \`linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url(\${currentUser.banner})\` : '';
+        
+        renderMarket();
+        renderFriends();
     }
-
-    socket.on('auth-success', data => {
-        document.getElementById('auth-overlay').style.display = 'none';
-        updateProfileUI(data);
-    });
-
-    socket.on('auth-error', err => {
-        alert(err);
-        localStorage.removeItem('royal_session');
-        document.getElementById('auth-overlay').style.display = 'flex';
-    });
 
     // --- NAVIGATION ---
-    function switchTab(tab, el) {
+    function switchTab(viewId, el) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-        document.getElementById('tab-' + tab).classList.add('active');
-        el.classList.add('active');
-    }
-
-    // --- MARKET ---
-    const items = ${JSON.stringify(MARKET_ITEMS)};
-    const mList = document.getElementById('market-list');
-    items.forEach(it => {
-        const d = document.createElement('div');
-        d.className = 'item-card';
-        d.innerHTML = \`
-            <div style="height:40px; margin-bottom:10px; \${it.type==='frame'?it.style:''}">\${it.type==='banner'?'🖼️':''}</div>
-            <div style="font-weight:bold; font-size:0.8rem">\${it.name}</div>
-            <button class="btn-royal" style="width:100%; margin-top:10px; font-size:0.7rem" onclick="socket.emit('buy', '\${it.id}')">\${it.price} 💎</button>
-        \`;
-        mList.appendChild(d);
-    });
-
-    function finishAd() {
-        document.getElementById('ad-modal').style.display = 'none';
-        socket.emit('watch-ad');
-    }
-
-    // --- CALLS ---
-    async function startCallUI() {
-        document.getElementById('call-ui').style.display = 'flex';
-        localStream = await navigator.mediaDevices.getUserMedia({audio: true});
-    }
-
-    async function shareScreen() {
-        const stream = await navigator.mediaDevices.getDisplayMedia({video: {frameRate: 60}});
-        document.getElementById('screen-view').srcObject = stream;
-    }
-
-    function toggleMute() {
-        const track = localStream.getAudioTracks()[0];
-        track.enabled = !track.enabled;
-        document.getElementById('mute-btn').innerText = track.enabled ? "🎤 Micro ON" : "🔇 Micro OFF";
-    }
-
-    function stopCall() {
-        if(localStream) localStream.getTracks().forEach(t => t.stop());
-        document.getElementById('call-ui').style.display = 'none';
-    }
-
-    // --- UI UPDATES ---
-    socket.on('update-user', data => updateProfileUI(data));
-
-    function updateProfileUI(u) {
-        document.getElementById('gem-val').innerText = u.gems;
-        document.getElementById('my-name').innerText = u.u;
-        document.getElementById('my-avatar').src = u.avatar || 'https://ui-avatars.com/api/?name='+u.u;
-        document.getElementById('my-frame').style = u.activeFrame || '';
-        if(u.banner) {
-            document.getElementById('user-bar').style.backgroundImage = \`linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url(\${u.banner})\`;
+        if(viewId.startsWith('chat')) {
+            document.getElementById('view-chat').classList.add('active');
+            activeRoom = viewId === 'chat-public' ? 'public' : viewId.split('-')[1];
+            document.getElementById('chat-title').innerText = viewId === 'chat-public' ? "Cour Publique" : "Privé: " + activeRoom;
+            document.getElementById('call-btn').style.display = activeRoom === 'public' ? 'none' : 'block';
+            document.getElementById('msgs').innerHTML = ''; // Nettoyer pour la nouvelle room
+        } else {
+            document.getElementById('view-' + viewId).classList.add('active');
         }
+        if(el) el.classList.add('active');
     }
 
+    // --- SOCIAL ---
+    function addFriend() {
+        const f = prompt("Nom de l'ami :");
+        if(f) socket.emit('add-friend', f);
+    }
+
+    function renderFriends() {
+        const container = document.getElementById('friend-list');
+        container.innerHTML = '';
+        currentUser.friends.forEach(f => {
+            const d = document.createElement('div');
+            d.className = 'nav-link';
+            d.innerHTML = '👤 ' + f;
+            d.onclick = () => switchTab('chat-' + f, d);
+            container.appendChild(d);
+        });
+    }
+
+    // --- CHAT ---
     function send() {
-        const inp = document.getElementById('msg-in');
-        if(!inp.value) return;
-        socket.emit('msg', inp.value);
-        inp.value = '';
+        const i = document.getElementById('msg-in');
+        if(!i.value) return;
+        socket.emit('msg', { room: activeRoom, txt: i.value });
+        i.value = '';
     }
 
     socket.on('new-msg', m => {
+        if(m.room !== activeRoom) return;
         const d = document.createElement('div');
-        d.style.marginBottom = "10px";
-        d.innerHTML = \`<b style="color:var(--gold-s)">\${m.from}:</b> \${m.txt}\`;
+        d.className = 'msg';
+        d.innerHTML = \`<span class="badge" style="color:\${m.rank.c}; border-color:\${m.rank.c}">\${m.rank.n}</span> <b>\${m.from}</b>: \${m.txt}\`;
         document.getElementById('msgs').appendChild(d);
         document.getElementById('msgs').scrollTop = document.getElementById('msgs').scrollHeight;
     });
+
+    // --- MARKET ---
+    function renderMarket() {
+        const container = document.getElementById('market-items');
+        container.innerHTML = '';
+        ${JSON.stringify(MARKET_ITEMS)}.forEach(it => {
+            const owned = currentUser.inventory.includes(it.id);
+            const div = document.createElement('div');
+            div.style = "background:#222; padding:15px; border-radius:10px; text-align:center";
+            div.innerHTML = \`
+                <div style="height:40px; margin-bottom:10px; \${it.type==='frame'?it.style:''}">\${it.type==='banner'?'🖼️':''}</div>
+                <div style="font-weight:bold; font-size:0.8rem">\${it.name}</div>
+                <button class="btn-royal" style="width:100%; margin-top:10px" \${owned ? 'disabled' : ''} onclick="socket.emit('buy', '\${it.id}')">
+                    \${owned ? 'POSSÉDÉ' : it.price + ' 💎'}
+                </button>\`;
+            container.appendChild(div);
+        });
+    }
+
+    // --- PROFILE ---
+    function saveProfile() {
+        const av = document.getElementById('set-av').value;
+        const ba = document.getElementById('set-ba').value;
+        socket.emit('update-profile', { avatar: av, banner: ba });
+        alert("Profil mis à jour !");
+    }
+
+    // --- ANNONCE ANIMÉE ---
+    function showAd() {
+        const modal = document.getElementById('ad-modal');
+        const fill = document.getElementById('ad-fill');
+        const closeBtn = document.getElementById('ad-close');
+        modal.style.display = 'flex';
+        fill.classList.add('active');
+        closeBtn.style.display = 'none';
+        setTimeout(() => { closeBtn.style.display = 'block'; }, 5000);
+    }
+
+    function finishAd() {
+        socket.emit('watch-ad');
+        document.getElementById('ad-modal').style.display = 'none';
+        document.getElementById('ad-fill').classList.remove('active');
+    }
+
+    // --- CALL & SCREENSHARE 60FPS ---
+    async function initiateCall() {
+        document.getElementById('call-area').style.display = 'block';
+    }
+
+    async function startScreenShare() {
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { frameRate: { ideal: 60, max: 60 } },
+                audio: true
+            });
+            document.getElementById('remote-video').srcObject = stream;
+        } catch(e) { console.error(e); }
+    }
+
+    function stopCall() {
+        document.getElementById('call-area').style.display = 'none';
+        const stream = document.getElementById('remote-video').srcObject;
+        if(stream) stream.getTracks().forEach(t => t.stop());
+    }
 </script>
 </body>
 </html>
 `);
 });
 
-// --- LOGIQUE SERVEUR ---
+// --- SERVEUR ---
+const xpCooldowns = new Map();
+
 io.on("connection", (socket) => {
     socket.on('login', d => {
         let u = users.findOne({u: d.u});
-        if(!u) {
-            u = users.insert({u: d.u, p: d.p, gems: 50, lastDaily: 0, activeFrame: '', banner: '', avatar: ''});
-        } else if(u.p !== d.p) {
-            return socket.emit('auth-error', "Mauvais mot de passe !");
-        }
+        if(!u) u = users.insert({ u: d.u, p: d.p, gems: 200, xp: 0, friends: [], inventory: [], avatar: '', banner: '', activeFrame: '' });
+        else if(u.p !== d.p) return;
         socket.user = u.u;
         socket.emit('auth-success', u);
     });
 
-    socket.on('buy', itemId => {
+    socket.on('msg', m => {
         const u = users.findOne({u: socket.user});
-        const item = MARKET_ITEMS.find(i => i.id === itemId);
-        if(u && item && u.gems >= item.price) {
-            u.gems -= item.price;
-            if(item.type === 'frame') u.activeFrame = item.style;
-            if(item.type === 'banner') u.banner = item.url;
+        if(!u) return;
+
+        // XP System
+        const now = Date.now();
+        if(now - (xpCooldowns.get(u.u) || 0) > 10000) {
+            u.xp += 10; users.update(u);
+            xpCooldowns.set(u.u, now);
+            socket.emit('update-user', u);
+        }
+
+        const lvl = Math.floor(Math.sqrt(u.xp)/2)+1;
+        io.emit('new-msg', { room: m.room, from: u.u, txt: m.txt, rank: getRank(lvl) });
+    });
+
+    socket.on('add-friend', name => {
+        const u = users.findOne({u: socket.user});
+        const target = users.findOne({u: name});
+        if(target && !u.friends.includes(name)) {
+            u.friends.push(name);
             users.update(u);
             socket.emit('update-user', u);
         }
     });
 
-    socket.on('claim-daily', () => {
+    socket.on('buy', id => {
         const u = users.findOne({u: socket.user});
-        const now = Date.now();
-        if(now - u.lastDaily > 86400000) {
-            u.gems += 50;
-            u.lastDaily = now;
+        const it = MARKET_ITEMS.find(i => i.id === id);
+        if(u && it && u.gems >= it.price && !u.inventory.includes(id)) {
+            u.gems -= it.price;
+            u.inventory.push(id);
+            if(it.type === 'frame') u.activeFrame = it.style;
+            if(it.type === 'banner') u.banner = it.url;
+            users.update(u);
+            socket.emit('update-user', u);
+        }
+    });
+
+    socket.on('update-profile', d => {
+        const u = users.findOne({u: socket.user});
+        if(u) {
+            u.avatar = d.avatar || u.avatar;
+            u.banner = d.banner || u.banner;
             users.update(u);
             socket.emit('update-user', u);
         }
@@ -307,14 +362,8 @@ io.on("connection", (socket) => {
 
     socket.on('watch-ad', () => {
         const u = users.findOne({u: socket.user});
-        u.gems += 10;
-        users.update(u);
-        socket.emit('update-user', u);
-    });
-
-    socket.on('msg', txt => {
-        io.emit('new-msg', {from: socket.user, txt});
+        if(u) { u.gems += 10; users.update(u); socket.emit('update-user', u); }
     });
 });
 
-server.listen(3000, () => console.log("Prêt sur http://localhost:3000"));
+server.listen(3000);
