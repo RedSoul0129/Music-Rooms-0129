@@ -185,6 +185,9 @@ io.on("connection", (socket) => {
     });
 });
 
+app.get("/", (req, res) => {
+    res.send("Royal Palace fonctionne 👑");
+});
 // ================= START =================
 server.listen(3000, () => {
     console.log("Royal Palace lancé sur port 3000");
