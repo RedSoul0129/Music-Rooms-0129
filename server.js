@@ -34,9 +34,10 @@ app.get("/", (req, res) => {
 
         .btn-royal { background: var(--gold); color: black; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
         .btn-royal:active { transform: scale(0.95); }
-        .btn-icon { background: transparent; border: 1px solid var(--gold-s); color: var(--gold-s); padding: 8px 12px; border-radius: 8px; cursor: pointer; }
-        input { background: #111; border: 1px solid #333; color: white; padding: 12px; border-radius: 8px; width: 100%; margin-bottom: 10px; font-size: 16px; outline: none; }
-        input:focus { border-color: var(--gold-s); }
+        .btn-icon { background: transparent; border: 1px solid var(--gold-s); color: var(--gold-s); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .btn-icon:hover { background: rgba(212, 175, 55, 0.1); }
+        input, select { background: #111; border: 1px solid #333; color: white; padding: 12px; border-radius: 8px; width: 100%; margin-bottom: 10px; font-size: 16px; outline: none; }
+        input:focus, select:focus { border-color: var(--gold-s); }
 
         /* SIDEBAR */
         #sidebar { width: 300px; background: var(--card); border-right: 1px solid #222; display: flex; flex-direction: column; transition: transform 0.3s ease; z-index: 100; }
@@ -58,7 +59,7 @@ app.get("/", (req, res) => {
         #user-bar::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.75); z-index: 0; }
         #user-bar > * { position: relative; z-index: 1; }
 
-        /* CHAT (CORRIGÉ HORIZONTAL) */
+        /* CHAT */
         #main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
         #top-bar { padding: 15px 20px; background: rgba(21, 21, 21, 0.95); border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
         #mobile-menu-btn { display: none; background: none; border: none; color: var(--gold-s); font-size: 1.5rem; cursor: pointer; }
@@ -79,22 +80,32 @@ app.get("/", (req, res) => {
         .msg-row.me .msg-bubble { background: var(--gold); color: black; border-bottom-right-radius: 2px; }
         .msg-author { font-size: 0.7rem; color: #888; margin-bottom: 4px; padding: 0 5px; }
 
-        /* YT & CALLS */
-        #yt-area, #call-area { display: none; flex: 1; flex-direction: column; background: #000; padding: 10px; }
+        /* YT */
+        #yt-area { display: none; flex: 1; flex-direction: column; background: #000; padding: 10px; }
         .video-wrapper { width: 100%; aspect-ratio: 16/9; background: #111; border: 1px solid var(--gold-s); border-radius: 8px; overflow: hidden; pointer-events: auto; }
         #yt-player { width: 100%; height: 100%; }
 
         /* MODALS */
         .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px); padding: 20px; }
         .modal.open { display: flex; }
-        .modal-box { background: var(--card); padding: 25px; border: 1px solid var(--gold-s); border-radius: 15px; width: 100%; max-width: 350px; text-align: center; max-height: 90vh; overflow-y: auto; }
+        .modal-box { background: var(--card); padding: 25px; border: 1px solid var(--gold-s); border-radius: 15px; width: 100%; max-width: 350px; text-align: center; max-height: 90vh; overflow-y: auto; position: relative; }
         .notif-badge { background: var(--danger); color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.6rem; font-weight: bold; }
+
+        /* CALL UI SPECIFICS */
+        #call-modal .modal-box { max-width: 800px; padding: 20px; }
+        .call-video-container { position: relative; width: 100%; background: #0a0a0a; border-radius: 10px; overflow: hidden; border: 1px solid #333; margin-bottom: 15px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
+        #remote-video { width: 100%; height: 100%; object-fit: contain; }
+        #local-video { position: absolute; bottom: 15px; right: 15px; width: 150px; border-radius: 8px; border: 2px solid var(--gold-s); background: #000; object-fit: cover; z-index: 10; display: none; }
+        .call-controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .call-active-indicator { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 5px; font-size: 0.8rem; color: #22c55e; display: flex; align-items: center; gap: 5px; z-index: 10; }
+        .call-active-indicator.connecting { color: var(--gold-s); }
 
         @media (max-width: 768px) {
             #sidebar { position: fixed; height: 100%; transform: translateX(-100%); width: 85%; max-width: 320px; }
             #sidebar.open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0,0,0,0.9); }
             #mobile-menu-btn { display: block; }
             .msg-content-wrapper { max-width: 85%; }
+            #local-video { width: 90px; }
         }
     </style>
 </head>
@@ -128,6 +139,29 @@ app.get("/", (req, res) => {
         
         <button class="btn-royal" style="width:100%; margin-top:15px; margin-bottom:10px" onclick="saveSettings()">SAUVEGARDER</button>
         <button class="btn-icon" style="width:100%; border-color:#555; color:#aaa" onclick="closeModal('settings-modal')">ANNULER</button>
+    </div>
+</div>
+
+<div id="call-modal" class="modal">
+    <div class="modal-box">
+        <h3 id="call-title" style="color:var(--gold-s); margin-top:0; margin-bottom: 15px;">Appel en cours...</h3>
+        
+        <div class="call-video-container">
+            <div id="call-status" class="call-active-indicator connecting">🔴 Connexion...</div>
+            <video id="remote-video" autoplay playsinline></video>
+            <video id="local-video" autoplay muted playsinline></video>
+        </div>
+        
+        <div class="call-controls">
+            <button id="btn-mute" class="btn-icon" onclick="toggleAudio()">🎤 Mute</button>
+            <button id="btn-screen" class="btn-icon" onclick="toggleScreenShare()">🖥️ Écran</button>
+            
+            <select id="audio-input-select" onchange="changeAudioInput()" style="width: auto; margin-bottom: 0; padding: 8px;">
+                <option value="">Microphone par défaut</option>
+            </select>
+
+            <button class="btn-royal" style="background:var(--danger); color:white; border:none;" onclick="endCall()">📞 Quitter</button>
+        </div>
     </div>
 </div>
 
@@ -175,8 +209,7 @@ app.get("/", (req, res) => {
             <h3 id="target-title" style="margin:0">Sélectionnez un chat</h3>
         </div>
         <div id="action-btns" style="display:none; gap:10px">
-            <button class="btn-icon" onclick="alert('Appel en cours de dev...')">📞</button>
-            <button class="btn-icon" onclick="alert('ScreenShare en cours de dev...')">🖥️ 60FPS</button>
+            <button class="btn-icon" onclick="startCallInitiation()">📞 Appel</button>
         </div>
     </div>
 
@@ -230,7 +263,6 @@ app.get("/", (req, res) => {
         document.getElementById('my-name').innerText = u.name;
         document.getElementById('my-avatar').src = u.avatar || 'https://ui-avatars.com/api/?name='+u.name;
         
-        // Applique la bannière sur TON profil en bas à gauche
         if(u.banner) {
             document.getElementById('user-bar').style.backgroundImage = \`linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(\${u.banner})\`;
         } else {
@@ -242,7 +274,6 @@ app.get("/", (req, res) => {
     });
     socket.on('auth-error', alert);
 
-    // --- BASE 64 POUR IMAGES (AVATAR & BANNIÈRE) ---
     async function getBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -266,19 +297,15 @@ app.get("/", (req, res) => {
         closeModal('settings-modal');
     }
 
-    // --- REQUÊTES ET SUGGESTIONS ---
     function sendFriendReq(inputId) {
         const t = document.getElementById(inputId).value.trim();
         if(t && t !== myData.name) socket.emit('send-request', t);
         if(document.getElementById(inputId)) document.getElementById(inputId).value = '';
     }
 
-    function quickAdd(name) {
-        socket.emit('send-request', name);
-    }
+    function quickAdd(name) { socket.emit('send-request', name); }
 
     socket.on('init-data', d => {
-        // Demandes
         const reqList = document.getElementById('requests-list'); reqList.innerHTML = '';
         const badge = document.getElementById('req-count');
         badge.style.display = d.requests.length > 0 ? 'inline-block' : 'none';
@@ -289,7 +316,6 @@ app.get("/", (req, res) => {
             reqList.appendChild(div);
         });
 
-        // Suggestions (Amis Mutuels)
         const sugList = document.getElementById('suggestions-list'); sugList.innerHTML = '';
         const sugTitle = document.getElementById('suggestions-title');
         sugTitle.style.display = d.suggestions.length > 0 ? 'block' : 'none';
@@ -299,18 +325,13 @@ app.get("/", (req, res) => {
             sugList.appendChild(div);
         });
 
-        // Amis (AVEC BANNIÈRES)
         const fList = document.getElementById('friends-list'); fList.innerHTML = '';
         d.friends.forEach(f => {
             const div = document.createElement('div'); div.className = 'list-item';
-            
-            // Ajout visuel de la bannière derrière le nom de l'ami
             if(f.banner) {
                 div.style.backgroundImage = \`linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(\${f.banner})\`;
-                div.style.backgroundSize = 'cover';
-                div.style.backgroundPosition = 'center';
+                div.style.backgroundSize = 'cover'; div.style.backgroundPosition = 'center';
             }
-            
             div.innerHTML = \`<div class="list-item-content"><img src="\${f.avatar || 'https://ui-avatars.com/api/?name='+f.name}" class="avatar" style="width:25px;height:25px"> <div class="status-dot \${f.online?'online':''}"></div> <span>\${f.name}</span></div>\`;
             div.onclick = () => switchView('user', f.name);
             fList.appendChild(div);
@@ -331,11 +352,12 @@ app.get("/", (req, res) => {
         });
     });
 
-    // --- NAV ---
     function switchView(type, target) {
         activeTarget = target; targetType = type;
         document.getElementById('target-title').innerText = target;
-        document.getElementById('action-btns').style.display = type === 'yt' ? 'none' : 'flex';
+        
+        // Cacher les boutons d'appels si on est dans un groupe ou youtube (pour l'instant P2P = 1v1)
+        document.getElementById('action-btns').style.display = (type === 'user') ? 'flex' : 'none';
         
         ['chat-area', 'yt-area'].forEach(id => document.getElementById(id).style.display = 'none');
         
@@ -350,7 +372,6 @@ app.get("/", (req, res) => {
         if(window.innerWidth <= 768) toggleSidebar();
     }
 
-    // --- CHAT HORIZONTAL ---
     function sendMsg() {
         const i = document.getElementById('chat-inp');
         if(!i.value) return;
@@ -375,7 +396,6 @@ app.get("/", (req, res) => {
         const c = document.getElementById('messages-container');
         const r = document.createElement('div'); 
         r.className = 'msg-row ' + (isMe ? 'me' : '');
-        
         r.innerHTML = \`<img src="\${m.avatar || 'https://ui-avatars.com/api/?name='+m.from}" class="avatar">
                        <div class="msg-content-wrapper">
                            <div class="msg-author">\${m.from}</div>
@@ -385,73 +405,249 @@ app.get("/", (req, res) => {
         c.scrollTop = c.scrollHeight;
     }
 
-    // --- CREATIONS ---
     function createGroup() { const n = prompt("Nom du groupe ?"); if(n) socket.emit('create-group', n); }
     function createYTRoom() { const n = prompt("Nom de la salle vidéo ?"); if(n) socket.emit('create-yt-room', n); }
 
-    // --- YOUTUBE SYNCRO ROBUSTE (PLAY/PAUSE/SEEK) ---
+    // --- YOUTUBE SYNCRO ---
     let player, ytSyncing = false;
     function onYouTubeIframeAPIReady() { 
-        player = new YT.Player('yt-player', { 
-            events: { 'onStateChange': onPlayerStateChange }
-        }); 
+        player = new YT.Player('yt-player', { events: { 'onStateChange': onPlayerStateChange } }); 
     }
-    
     function addToYT() {
         const url = document.getElementById('yt-url').value;
         const id = url.split('v=')[1]?.split('&')[0];
-        if(id) { 
-            socket.emit('yt-action', { room: activeTarget, action: 'load', id }); 
-            document.getElementById('yt-url').value = ''; 
-        }
+        if(id) { socket.emit('yt-action', { room: activeTarget, action: 'load', id }); document.getElementById('yt-url').value = ''; }
     }
-
-    // Détecte quand TOI tu cliques sur le lecteur (pause, play, avance rapide)
     function onPlayerStateChange(e) {
-        if(ytSyncing) return; // Évite que les signaux du serveur ne fassent une boucle infinie
+        if(ytSyncing) return;
         if(e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.PAUSED) {
-            socket.emit('yt-action', { 
-                room: activeTarget, 
-                action: 'sync', 
-                state: e.data, 
-                time: player.getCurrentTime() 
-            });
+            socket.emit('yt-action', { room: activeTarget, action: 'sync', state: e.data, time: player.getCurrentTime() });
         }
     }
-
-    // Reçoit le signal des autres
     socket.on('yt-sync', d => {
-        ytSyncing = true; // On bloque notre propre envoi le temps d'appliquer le changement
-        
-        if(d.action === 'load') {
-            player.loadVideoById(d.id);
-        }
-        
+        ytSyncing = true; 
+        if(d.action === 'load') player.loadVideoById(d.id);
         if(d.action === 'sync') {
             const myTime = player.getCurrentTime();
-            // Si le temps de l'autre est très différent (quelqu'un a avancé la vidéo)
             if(Math.abs(myTime - d.time) > 1.5) player.seekTo(d.time, true);
-            
-            // Syncro de l'état (1=Play, 2=Pause)
-            if(d.state === 1) player.playVideo(); 
-            else if(d.state === 2) player.pauseVideo();
+            if(d.state === 1) player.playVideo(); else if(d.state === 2) player.pauseVideo();
         }
-        
-        // On libère le verrou après l'exécution
         setTimeout(() => ytSyncing = false, 800);
+    });
+
+    // ==========================================
+    // --- SYSTÈME D'APPELS WEBRTC (DISCORD) ---
+    // ==========================================
+    
+    let peerConnection;
+    let localStream;
+    let screenStream;
+    let currentCallTarget = null;
+    let isMuted = false;
+    
+    const servers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; // STUN public Google
+
+    // Lancement de l'appel par l'utilisateur
+    async function startCallInitiation() {
+        if(!activeTarget || targetType !== 'user') return alert("Appels limités aux conversations privées pour le moment.");
+        currentCallTarget = activeTarget;
+        
+        document.getElementById('call-title').innerText = "Appel avec " + activeTarget;
+        openModal('call-modal');
+        await getMediaAndStart();
+        
+        peerConnection = createPeerConnection();
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+        
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('rtc-signal', { target: currentCallTarget, type: 'offer', sdp: peerConnection.localDescription });
+    }
+
+    // Capture du micro de base
+    async function getMediaAndStart() {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            document.getElementById('local-video').srcObject = localStream; // Audio n'affichera rien de base
+            await populateAudioDevices();
+        } catch(e) {
+            alert("Impossible d'accéder au microphone !");
+            console.error(e);
+        }
+    }
+
+    function createPeerConnection() {
+        const pc = new RTCPeerConnection(servers);
+        
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                socket.emit('rtc-signal', { target: currentCallTarget, type: 'candidate', candidate: event.candidate });
+            }
+        };
+
+        pc.ontrack = (event) => {
+            const remoteVid = document.getElementById('remote-video');
+            remoteVid.srcObject = event.streams[0];
+            document.getElementById('call-status').innerText = "🟢 Connecté";
+            document.getElementById('call-status').classList.remove('connecting');
+        };
+
+        pc.onconnectionstatechange = () => {
+            if(pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                endCall(false); // Fausse fin d'appel pour nettoyer
+            }
+        };
+
+        return pc;
+    }
+
+    // Bouton Mute
+    function toggleAudio() {
+        if (!localStream) return;
+        isMuted = !isMuted;
+        localStream.getAudioTracks()[0].enabled = !isMuted;
+        const btn = document.getElementById('btn-mute');
+        btn.innerText = isMuted ? "🎤 Unmute" : "🎤 Mute";
+        btn.style.color = isMuted ? "var(--danger)" : "var(--gold-s)";
+        btn.style.borderColor = isMuted ? "var(--danger)" : "var(--gold-s)";
+    }
+
+    // Liste des micros
+    async function populateAudioDevices() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const select = document.getElementById('audio-input-select');
+        select.innerHTML = '';
+        
+        devices.filter(d => d.kind === 'audioinput').forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || \`Microphone \${select.length + 1}\`;
+            select.appendChild(option);
+        });
+    }
+
+    // Changer de micro en plein appel
+    async function changeAudioInput() {
+        const deviceId = document.getElementById('audio-input-select').value;
+        if (!deviceId || !peerConnection) return;
+        
+        const newStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
+        const newAudioTrack = newStream.getAudioTracks()[0];
+        
+        const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+        if (sender) sender.replaceTrack(newAudioTrack);
+        
+        localStream.removeTrack(localStream.getAudioTracks()[0]);
+        localStream.addTrack(newAudioTrack);
+        newAudioTrack.enabled = !isMuted;
+    }
+
+    // Bouton Partage d'écran (60FPS WebRTC natif)
+    async function toggleScreenShare() {
+        if (screenStream) {
+            // Arrêter le partage
+            screenStream.getTracks().forEach(t => t.stop());
+            screenStream = null;
+            
+            // Retirer la vidéo locale de la vue
+            document.getElementById('local-video').style.display = 'none';
+            document.getElementById('btn-screen').style.background = 'transparent';
+            
+            // Retirer la track du PC
+            const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender) peerConnection.removeTrack(sender);
+        } else {
+            // Démarrer le partage
+            try {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 60 } }, audio: true });
+                const videoTrack = screenStream.getVideoTracks()[0];
+                
+                // Afficher son propre écran en petit
+                const localVid = document.getElementById('local-video');
+                localVid.style.display = 'block';
+                localVid.srcObject = screenStream;
+                document.getElementById('btn-screen').style.background = 'rgba(212, 175, 55, 0.3)';
+
+                // Envoyer la track aux autres
+                peerConnection.addTrack(videoTrack, screenStream);
+                
+                // Si on arrête via le bouton natif du navigateur "Arrêter le partage"
+                videoTrack.onended = () => { toggleScreenShare(); };
+
+                // Regénérer une offre pour informer l'autre de la nouvelle track Vidéo
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                socket.emit('rtc-signal', { target: currentCallTarget, type: 'offer', sdp: peerConnection.localDescription });
+
+            } catch (err) { console.error("Partage d'écran annulé", err); }
+        }
+    }
+
+    // Terminer l'appel
+    function endCall(sendSignal = true) {
+        if(sendSignal && currentCallTarget) socket.emit('rtc-signal', { target: currentCallTarget, type: 'end' });
+        
+        if (peerConnection) { peerConnection.close(); peerConnection = null; }
+        if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+        if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+        
+        document.getElementById('local-video').style.display = 'none';
+        document.getElementById('remote-video').srcObject = null;
+        document.getElementById('call-status').innerText = "🔴 Connexion...";
+        document.getElementById('call-status').classList.add('connecting');
+        
+        isMuted = false;
+        document.getElementById('btn-mute').innerText = "🎤 Mute";
+        document.getElementById('btn-mute').style.color = "var(--gold-s)";
+        document.getElementById('btn-mute').style.borderColor = "var(--gold-s)";
+        document.getElementById('btn-screen').style.background = 'transparent';
+        
+        currentCallTarget = null;
+        closeModal('call-modal');
+    }
+
+    // Réception des signaux WebRTC via Socket.io
+    socket.on('rtc-signal', async (data) => {
+        if (data.type === 'offer') {
+            // Demande d'appel reçue
+            currentCallTarget = data.from;
+            document.getElementById('call-title').innerText = "Appel de " + data.from;
+            openModal('call-modal');
+            
+            if(!localStream) await getMediaAndStart();
+            if(!peerConnection) {
+                peerConnection = createPeerConnection();
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            }
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            socket.emit('rtc-signal', { target: data.from, type: 'answer', sdp: peerConnection.localDescription });
+        } 
+        else if (data.type === 'answer') {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        } 
+        else if (data.type === 'candidate') {
+            if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } 
+        else if (data.type === 'end') {
+            endCall(false); // false pour ne pas boucler le signal de fin
+            alert(data.from + " a raccroché.");
+        }
     });
 
 </script>
 </body>
 </html>
-`);
+  `);
 });
 
 // --- SERVEUR NODE.JS ---
 io.on("connection", (socket) => {
     socket.on('register', (d) => {
         if(users.findOne({u: d.u})) return socket.emit('auth-error', 'Nom pris');
-        // Ajout du champ banner
         const u = users.insert({ u: d.u, p: d.p, avatar: '', banner: '', friends: [], requests: [] });
         loginOk(socket, u);
     });
@@ -486,7 +682,6 @@ io.on("connection", (socket) => {
         refreshUser(socket); if(userSockets[f]) refreshUser(io.sockets.sockets.get(userSockets[f]));
     });
 
-    // Filtre et envoi de message
     socket.on('send-msg', d => {
         const me = users.findOne({u: activeUsers[socket.id]});
         let cleanText = d.text.replace(slurs, "***"); 
@@ -518,15 +713,22 @@ io.on("connection", (socket) => {
     socket.on('create-yt-room', n => { if(!ytRooms.findOne({name: n})) { ytRooms.insert({name: n, queue: []}); refreshAll(); } });
     
     socket.on('join-yt-room', r => socket.join('yt_'+r));
-    socket.on('yt-action', d => io.to('yt_'+d.room).emit('yt-sync', d)); // Relais du signal Play/Pause
+    socket.on('yt-action', d => io.to('yt_'+d.room).emit('yt-sync', d)); 
 
-    // PROFIL AVEC BANNIÈRE
+    // Relais de signaux WebRTC (Offre, Réponse, ICE, Fin d'appel)
+    socket.on('rtc-signal', d => {
+        const targetSocketId = userSockets[d.target];
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('rtc-signal', { ...d, from: activeUsers[socket.id] });
+        }
+    });
+
     socket.on('update-profile', d => {
         const u = users.findOne({u: activeUsers[socket.id]});
         if(d.name) { delete userSockets[u.u]; u.u = d.name; userSockets[u.u] = socket.id; activeUsers[socket.id] = u.u; }
         if(d.pass) u.p = d.pass; 
         if(d.avatar) u.avatar = d.avatar;
-        if(d.banner) u.banner = d.banner; // Sauvegarde la bannière
+        if(d.banner) u.banner = d.banner; 
         users.update(u); 
         socket.emit('auth-success', { name: u.u, avatar: u.avatar, banner: u.banner }); 
         refreshAll();
@@ -536,13 +738,11 @@ io.on("connection", (socket) => {
         if(!s) return;
         const u = users.findOne({u: activeUsers[s.id]});
         if(u) {
-            // Amis avec infos bannières
             const fData = u.friends.map(f => { 
                 const fu = users.findOne({u:f}); 
                 return { name: f, online: !!userSockets[f], avatar: fu?fu.avatar:'', banner: fu?fu.banner:'' }; 
             });
             
-            // Calcul des suggestions d'amis mutuels
             let suggestions = new Set();
             u.friends.forEach(f => {
                 const fu = users.findOne({u: f});
@@ -561,7 +761,7 @@ io.on("connection", (socket) => {
             s.emit('init-data', { 
                 friends: fData, 
                 requests: u.requests, 
-                suggestions: Array.from(suggestions), // Envoi des suggestions au client
+                suggestions: Array.from(suggestions), 
                 groups: gData, 
                 ytRooms: yData 
             });
@@ -572,4 +772,6 @@ io.on("connection", (socket) => {
     socket.on('disconnect', () => { delete userSockets[activeUsers[socket.id]]; delete activeUsers[socket.id]; refreshAll(); });
 });
 
-server.listen(3000);
+server.listen(3000, () => {
+    console.log("Palais Royal actif sur le port 3000");
+});
