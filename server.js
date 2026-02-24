@@ -54,7 +54,7 @@ app.get("/", (req, res) => {
         .online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
         .avatar { width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 1px solid var(--gold-s); flex-shrink: 0; }
 
-        /* USER BAR (AVEC BANNIÈRE) */
+        /* USER BAR */
         #user-bar { position: relative; padding: 15px; border-top: 1px solid #222; display: flex; align-items: center; gap: 10px; background-size: cover; background-position: center; }
         #user-bar::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.75); z-index: 0; }
         #user-bar > * { position: relative; z-index: 1; }
@@ -72,11 +72,7 @@ app.get("/", (req, res) => {
         .msg-content-wrapper { display: flex; flex-direction: column; align-items: flex-start; max-width: 75%; }
         .msg-row.me .msg-content-wrapper { align-items: flex-end; }
         
-        .msg-bubble { 
-            padding: 10px 15px; border-radius: 12px; background: #1a1a1a; 
-            font-size: 0.95rem; white-space: pre-wrap; word-wrap: break-word; text-align: left;
-            display: inline-block; 
-        }
+        .msg-bubble { padding: 10px 15px; border-radius: 12px; background: #1a1a1a; font-size: 0.95rem; white-space: pre-wrap; word-wrap: break-word; text-align: left; display: inline-block; }
         .msg-row.me .msg-bubble { background: var(--gold); color: black; border-bottom-right-radius: 2px; }
         .msg-author { font-size: 0.7rem; color: #888; margin-bottom: 4px; padding: 0 5px; }
 
@@ -92,11 +88,11 @@ app.get("/", (req, res) => {
         .notif-badge { background: var(--danger); color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.6rem; font-weight: bold; }
 
         /* CALL UI SPECIFICS */
-        #call-modal .modal-box { max-width: 800px; padding: 20px; }
+        #call-modal .modal-box { max-width: 850px; padding: 20px; }
         .call-video-container { position: relative; width: 100%; background: #0a0a0a; border-radius: 10px; overflow: hidden; border: 1px solid #333; margin-bottom: 15px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
         #remote-video { width: 100%; height: 100%; object-fit: contain; }
         #local-video { position: absolute; bottom: 15px; right: 15px; width: 150px; border-radius: 8px; border: 2px solid var(--gold-s); background: #000; object-fit: cover; z-index: 10; display: none; }
-        .call-controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .call-controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; align-items: center; }
         .call-active-indicator { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 5px; font-size: 0.8rem; color: #22c55e; display: flex; align-items: center; gap: 5px; z-index: 10; }
         .call-active-indicator.connecting { color: var(--gold-s); }
 
@@ -117,9 +113,7 @@ app.get("/", (req, res) => {
         <input id="auth-u" placeholder="Pseudo" autocomplete="off">
         <input id="auth-p" type="password" placeholder="Mot de passe">
         <button class="btn-royal" style="width:100%" onclick="handleAuth()">ENTRER</button>
-        <p style="font-size:0.8rem; margin-top:15px">
-            Pas de compte ? <a href="#" onclick="toggleAuth()" style="color:var(--gold-s)" id="auth-toggle">S'inscrire</a>
-        </p>
+        <p style="font-size:0.8rem; margin-top:15px">Pas de compte ? <a href="#" onclick="toggleAuth()" style="color:var(--gold-s)" id="auth-toggle">S'inscrire</a></p>
     </div>
 </div>
 
@@ -128,15 +122,11 @@ app.get("/", (req, res) => {
         <h3 style="color:var(--gold-s); margin-top:0;">PARAMÈTRES</h3>
         <input id="set-u" placeholder="Nouveau Pseudo">
         <input id="set-p" type="password" placeholder="Nouveau Mot de passe">
-        
         <h4 style="color:var(--gold-s); margin-top:15px; border-bottom:1px solid #333; padding-bottom:5px; text-align:left;">🎨 Customisation</h4>
-        
         <p style="text-align:left; font-size:0.8rem; color:#aaa; margin:5px 0">Icône (Avatar) :</p>
         <input type="file" id="set-av" accept="image/*" style="font-size:0.8rem; padding:8px; background:#222">
-        
         <p style="text-align:left; font-size:0.8rem; color:#aaa; margin:5px 0">Bannière (Fond du nom) :</p>
         <input type="file" id="set-banner" accept="image/*" style="font-size:0.8rem; padding:8px; background:#222">
-        
         <button class="btn-royal" style="width:100%; margin-top:15px; margin-bottom:10px" onclick="saveSettings()">SAUVEGARDER</button>
         <button class="btn-icon" style="width:100%; border-color:#555; color:#aaa" onclick="closeModal('settings-modal')">ANNULER</button>
     </div>
@@ -144,6 +134,8 @@ app.get("/", (req, res) => {
 
 <div id="call-modal" class="modal">
     <div class="modal-box">
+        <button class="btn-icon" style="position:absolute; top:15px; right:15px; border:none; font-size:1.2rem;" onclick="hideCallModal()" title="Réduire la fenêtre d'appel">➖</button>
+        
         <h3 id="call-title" style="color:var(--gold-s); margin-top:0; margin-bottom: 15px;">Appel en cours...</h3>
         
         <div class="call-video-container">
@@ -160,10 +152,17 @@ app.get("/", (req, res) => {
                 <option value="">Microphone par défaut</option>
             </select>
 
+            <button class="btn-icon" onclick="toggleFullScreen()" title="Plein écran">📺</button>
+            <button class="btn-icon" onclick="togglePictureInPicture()" title="Mini-lecteur (Pop-out)">🪟</button>
+
             <button class="btn-royal" style="background:var(--danger); color:white; border:none;" onclick="endCall()">📞 Quitter</button>
         </div>
     </div>
 </div>
+
+<button id="return-call-btn" class="btn-royal" style="display:none; position:fixed; bottom:20px; right:20px; z-index:1500; border-radius:50px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);" onclick="openModal('call-modal'); this.style.display='none';">
+    📞 Retour à l'appel
+</button>
 
 <div id="sidebar">
     <div class="sidebar-header">
@@ -209,7 +208,7 @@ app.get("/", (req, res) => {
             <h3 id="target-title" style="margin:0">Sélectionnez un chat</h3>
         </div>
         <div id="action-btns" style="display:none; gap:10px">
-            <button class="btn-icon" onclick="startCallInitiation()">📞 Appel</button>
+            <button id="btn-start-call" class="btn-icon" onclick="startCallInitiation()">📞 Appel</button>
         </div>
     </div>
 
@@ -263,11 +262,8 @@ app.get("/", (req, res) => {
         document.getElementById('my-name').innerText = u.name;
         document.getElementById('my-avatar').src = u.avatar || 'https://ui-avatars.com/api/?name='+u.name;
         
-        if(u.banner) {
-            document.getElementById('user-bar').style.backgroundImage = \`linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(\${u.banner})\`;
-        } else {
-            document.getElementById('user-bar').style.backgroundImage = 'none';
-        }
+        if(u.banner) { document.getElementById('user-bar').style.backgroundImage = \`linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(\${u.banner})\`; } 
+        else { document.getElementById('user-bar').style.backgroundImage = 'none'; }
 
         closeModal('auth-modal');
         socket.emit('get-init-data'); 
@@ -356,8 +352,12 @@ app.get("/", (req, res) => {
         activeTarget = target; targetType = type;
         document.getElementById('target-title').innerText = target;
         
-        // Cacher les boutons d'appels si on est dans un groupe ou youtube (pour l'instant P2P = 1v1)
-        document.getElementById('action-btns').style.display = (type === 'user') ? 'flex' : 'none';
+        // MODIFICATION ICI: N'affiche le bouton d'appel QUE si on est dans un chat privé ET que la cible n'est PAS nous-même
+        if (type === 'user' && target !== myData.name) {
+            document.getElementById('action-btns').style.display = 'flex';
+        } else {
+            document.getElementById('action-btns').style.display = 'none';
+        }
         
         ['chat-area', 'yt-area'].forEach(id => document.getElementById(id).style.display = 'none');
         
@@ -445,11 +445,15 @@ app.get("/", (req, res) => {
     let currentCallTarget = null;
     let isMuted = false;
     
-    const servers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; // STUN public Google
+    const servers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; 
 
-    // Lancement de l'appel par l'utilisateur
+    // Lancement de l'appel
     async function startCallInitiation() {
         if(!activeTarget || targetType !== 'user') return alert("Appels limités aux conversations privées pour le moment.");
+        
+        // MODIFICATION ICI: Sécurité anti-boucle (on s'appelle soi-même)
+        if(activeTarget === myData.name) return alert("Vous ne pouvez pas vous appeler vous-même !");
+
         currentCallTarget = activeTarget;
         
         document.getElementById('call-title').innerText = "Appel avec " + activeTarget;
@@ -464,11 +468,10 @@ app.get("/", (req, res) => {
         socket.emit('rtc-signal', { target: currentCallTarget, type: 'offer', sdp: peerConnection.localDescription });
     }
 
-    // Capture du micro de base
     async function getMediaAndStart() {
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            document.getElementById('local-video').srcObject = localStream; // Audio n'affichera rien de base
+            document.getElementById('local-video').srcObject = localStream;
             await populateAudioDevices();
         } catch(e) {
             alert("Impossible d'accéder au microphone !");
@@ -494,14 +497,13 @@ app.get("/", (req, res) => {
 
         pc.onconnectionstatechange = () => {
             if(pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-                endCall(false); // Fausse fin d'appel pour nettoyer
+                endCall(false); 
             }
         };
 
         return pc;
     }
 
-    // Bouton Mute
     function toggleAudio() {
         if (!localStream) return;
         isMuted = !isMuted;
@@ -512,7 +514,6 @@ app.get("/", (req, res) => {
         btn.style.borderColor = isMuted ? "var(--danger)" : "var(--gold-s)";
     }
 
-    // Liste des micros
     async function populateAudioDevices() {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const select = document.getElementById('audio-input-select');
@@ -526,7 +527,6 @@ app.get("/", (req, res) => {
         });
     }
 
-    // Changer de micro en plein appel
     async function changeAudioInput() {
         const deviceId = document.getElementById('audio-input-select').value;
         if (!deviceId || !peerConnection) return;
@@ -542,54 +542,87 @@ app.get("/", (req, res) => {
         newAudioTrack.enabled = !isMuted;
     }
 
-    // Bouton Partage d'écran (60FPS WebRTC natif)
     async function toggleScreenShare() {
         if (screenStream) {
-            // Arrêter le partage
             screenStream.getTracks().forEach(t => t.stop());
             screenStream = null;
-            
-            // Retirer la vidéo locale de la vue
             document.getElementById('local-video').style.display = 'none';
             document.getElementById('btn-screen').style.background = 'transparent';
             
-            // Retirer la track du PC
             const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
             if (sender) peerConnection.removeTrack(sender);
         } else {
-            // Démarrer le partage
             try {
                 screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 60 } }, audio: true });
                 const videoTrack = screenStream.getVideoTracks()[0];
                 
-                // Afficher son propre écran en petit
                 const localVid = document.getElementById('local-video');
                 localVid.style.display = 'block';
                 localVid.srcObject = screenStream;
                 document.getElementById('btn-screen').style.background = 'rgba(212, 175, 55, 0.3)';
 
-                // Envoyer la track aux autres
                 peerConnection.addTrack(videoTrack, screenStream);
-                
-                // Si on arrête via le bouton natif du navigateur "Arrêter le partage"
                 videoTrack.onended = () => { toggleScreenShare(); };
 
-                // Regénérer une offre pour informer l'autre de la nouvelle track Vidéo
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 socket.emit('rtc-signal', { target: currentCallTarget, type: 'offer', sdp: peerConnection.localDescription });
-
             } catch (err) { console.error("Partage d'écran annulé", err); }
         }
     }
 
-    // Terminer l'appel
+    // --- NOUVEAUTÉS DE VISIONNAGE ---
+
+    // 1. Plein écran Natif
+    function toggleFullScreen() {
+        const videoElem = document.getElementById('remote-video');
+        if (!document.fullscreenElement) {
+            if (videoElem.requestFullscreen) {
+                videoElem.requestFullscreen();
+            } else if (videoElem.webkitRequestFullscreen) { /* Safari */
+                videoElem.webkitRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    }
+
+    // 2. Mini-lecteur / Pop-out (Picture-in-Picture)
+    async function togglePictureInPicture() {
+        const videoElem = document.getElementById('remote-video');
+        if (document.pictureInPictureElement) {
+            await document.exitPictureInPicture();
+        } else if (document.pictureInPictureEnabled) {
+            try {
+                await videoElem.requestPictureInPicture();
+            } catch(e) {
+                alert("Le flux n'est pas encore prêt ou ton navigateur ne supporte pas cette option.");
+            }
+        } else {
+            alert("Ton navigateur ne supporte pas le mode Mini-lecteur.");
+        }
+    }
+
+    // 3. Réduire le Modal (Garder l'appel actif en fond)
+    function hideCallModal() {
+        closeModal('call-modal');
+        document.getElementById('return-call-btn').style.display = 'block'; // Affiche un bouton flottant pour revenir
+    }
+
+    // ----------------------------------
+
     function endCall(sendSignal = true) {
         if(sendSignal && currentCallTarget) socket.emit('rtc-signal', { target: currentCallTarget, type: 'end' });
         
         if (peerConnection) { peerConnection.close(); peerConnection = null; }
         if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
         if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+        
+        // Quitter plein ecran / PiP si actif au moment de raccrocher
+        if (document.pictureInPictureElement) document.exitPictureInPicture();
+        if (document.fullscreenElement) document.exitFullscreen();
         
         document.getElementById('local-video').style.display = 'none';
         document.getElementById('remote-video').srcObject = null;
@@ -601,18 +634,18 @@ app.get("/", (req, res) => {
         document.getElementById('btn-mute').style.color = "var(--gold-s)";
         document.getElementById('btn-mute').style.borderColor = "var(--gold-s)";
         document.getElementById('btn-screen').style.background = 'transparent';
+        document.getElementById('return-call-btn').style.display = 'none';
         
         currentCallTarget = null;
         closeModal('call-modal');
     }
 
-    // Réception des signaux WebRTC via Socket.io
     socket.on('rtc-signal', async (data) => {
         if (data.type === 'offer') {
-            // Demande d'appel reçue
             currentCallTarget = data.from;
             document.getElementById('call-title').innerText = "Appel de " + data.from;
             openModal('call-modal');
+            document.getElementById('return-call-btn').style.display = 'none';
             
             if(!localStream) await getMediaAndStart();
             if(!peerConnection) {
@@ -633,7 +666,7 @@ app.get("/", (req, res) => {
             if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
         } 
         else if (data.type === 'end') {
-            endCall(false); // false pour ne pas boucler le signal de fin
+            endCall(false); 
             alert(data.from + " a raccroché.");
         }
     });
@@ -641,7 +674,7 @@ app.get("/", (req, res) => {
 </script>
 </body>
 </html>
-  `);
+`);
 });
 
 // --- SERVEUR NODE.JS ---
@@ -715,7 +748,6 @@ io.on("connection", (socket) => {
     socket.on('join-yt-room', r => socket.join('yt_'+r));
     socket.on('yt-action', d => io.to('yt_'+d.room).emit('yt-sync', d)); 
 
-    // Relais de signaux WebRTC (Offre, Réponse, ICE, Fin d'appel)
     socket.on('rtc-signal', d => {
         const targetSocketId = userSockets[d.target];
         if (targetSocketId) {
