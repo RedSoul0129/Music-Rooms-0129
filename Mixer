@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>YouTube DJ Mixer</title>
+<style>
+    body { font-family: sans-serif; background: #111; color: white; padding: 20px; }
+    .deck { background: #222; padding: 15px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #444; }
+    input[type="text"] { width: 80%; padding: 8px; margin-bottom: 10px; background: #000; color: white; border: 1px solid #555; }
+    .slider { width: 100%; margin: 10px 0; }
+    button { padding: 10px 15px; background: #d4af37; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; }
+    button:disabled { background: #555; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<h2>🎧 YouTube DJ Mixer</h2>
+
+<div class="deck" id="deck1">
+    <h3>Piste Principale (Verrouillée après chargement)</h3>
+    <input type="text" id="yt1" placeholder="URL YouTube (ex: https://youtube.com/watch?v=...)">
+    <button id="btnLoad1" onclick="loadTrack(1)">Charger la piste</button>
+    <br><br>
+    Volume: <input type="range" id="vol1" class="slider" min="0" max="1" step="0.01" value="0.8">
+    Pitch: <input type="range" id="pitch1" class="slider" min="0.5" max="2" step="0.01" value="1">
+</div>
+
+<div class="deck" id="deck2">
+    <h3>Piste Secondaire</h3>
+    <input type="text" id="yt2" placeholder="URL YouTube...">
+    <button id="btnLoad2" onclick="loadTrack(2)">Charger la piste</button>
+    <br><br>
+    Volume: <input type="range" id="vol2" class="slider" min="0" max="1" step="0.01" value="0.8">
+    Pitch: <input type="range" id="pitch2" class="slider" min="0.5" max="2" step="0.01" value="1">
+</div>
+
+<div class="deck">
+    <h3>Master</h3>
+    Crossfader: <input type="range" id="cross" class="slider" min="0" max="1" step="0.01" value="0.5">
+    <button onclick="previewMix()">▶️ Jouer le Mix</button>
+    <button onclick="stopMix()">⏹️ Stop</button>
+    <button onclick="exportMP3()">💾 Exporter MP3</button>
+</div>
+
+<script src="https://unpkg.com/lamejs@1.2.0/lame.min.js"></script>
+
+<script>
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+let buffers = { 1: null, 2: null };
+let sources = { 1: null, 2: null };
+let gains = { 1: null, 2: null };
+
+async function loadTrack(trackNum) {
+    const urlInput = document.getElementById(`yt${trackNum}`);
+    const btn = document.getElementById(`btnLoad${trackNum}`);
+    
+    if (!urlInput.value) return alert("Mets une URL valide !");
+    
+    btn.innerText = "Chargement...";
+    btn.disabled = true;
+
+    try {
+        // Appelle NOTRE serveur Node.js, pas directement YouTube
+        const response = await fetch(`/api/audio?url=${encodeURIComponent(urlInput.value)}`);
+        if (!response.ok) throw new Error("Erreur serveur ou URL invalide");
+        
+        const arrayBuffer = await response.arrayBuffer();
+        buffers[trackNum] = await ctx.decodeAudioData(arrayBuffer);
+        
+        btn.innerText = "Piste Prête ✅";
+        if (trackNum === 1) urlInput.disabled = true; // Verrouille la piste principale
+    } catch (err) {
+        alert("Erreur de chargement : " + err.message);
+        btn.innerText = "Réessayer";
+        btn.disabled = false;
+    }
+}
+
+function previewMix() {
+    if (!buffers[1] || !buffers[2]) return alert("Charge les deux pistes d'abord !");
+    stopMix(); // Arrête s'il y a déjà une lecture en cours
+
+    [1, 2].forEach(num => {
+        sources[num] = ctx.createBufferSource();
+        sources[num].buffer = buffers[num];
+        
+        // Pitch
+        sources[num].playbackRate.value = parseFloat(document.getElementById(`pitch${num}`).value);
+        
+        // Volume individuel
+        gains[num] = ctx.createGain();
+        const vol = parseFloat(document.getElementById(`vol${num}`).value);
+        
+        // Calcul du Crossfader
+        const cross = parseFloat(document.getElementById("cross").value);
+        const crossMult = num === 1 ? (1 - cross) : cross;
+        
+        gains[num].gain.value = vol * crossMult;
+
+        // Connexion
+        sources[num].connect(gains[num]).connect(ctx.destination);
+        sources[num].start(0);
+    });
+
+    // Mise à jour en temps réel des sliders
+    document.getElementById("cross").oninput = updateVolumes;
+    document.getElementById("vol1").oninput = updateVolumes;
+    document.getElementById("vol2").oninput = updateVolumes;
+    document.getElementById("pitch1").oninput = () => sources[1].playbackRate.value = document.getElementById("pitch1").value;
+    document.getElementById("pitch2").oninput = () => sources[2].playbackRate.value = document.getElementById("pitch2").value;
+}
+
+function updateVolumes() {
+    if (!gains[1] || !gains[2]) return;
+    const cross = parseFloat(document.getElementById("cross").value);
+    gains[1].gain.value = parseFloat(document.getElementById("vol1").value) * (1 - cross);
+    gains[2].gain.value = parseFloat(document.getElementById("vol2").value) * cross;
+}
+
+function stopMix() {
+    if (sources[1]) { sources[1].stop(); sources[1].disconnect(); }
+    if (sources[2]) { sources[2].stop(); sources[2].disconnect(); }
+}
+
+async function exportMP3() {
+    // La logique d'export LameJS corrigée (la même que dans le message précédent)
+    // Elle mixera les buffers[1] et buffers[2] en appliquant les volumes et le pitch.
+    alert("Ici, tu colles la fonction exportMP3() corrigée avec LameJS !");
+}
+</script>
+</body>
+</html>
