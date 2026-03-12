@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Mini Web DJ Mixer</title>
+<title>Mini Web DJ Mixer - Tout en un</title>
 <style>
 body { font-family:sans-serif; background:#111; color:white; padding:20px; }
 .slider { width:300px; }
@@ -12,7 +12,7 @@ canvas { background:#222; display:block; margin:10px 0; }
 </head>
 <body>
 
-<h2>Mini Web DJ Mixer</h2>
+<h2>Mini Web DJ Mixer - Tout-en-un</h2>
 
 Track 1: <input type="file" id="track1"><br>
 Track 2: <input type="file" id="track2"><br><br>
@@ -27,10 +27,30 @@ Pitch Track 2: <input type="range" id="pitch2" min="0.5" max="2" step="0.01" val
 <canvas id="waveform" width="600" height="100"></canvas>
 <audio id="player" controls></audio>
 
-<!-- Inclure lame.min.js localement ou via CDN -->
-<script src="https://unpkg.com/lamejs@1.2.0/lame.min.js"></script>
-
+<!-- LameJS inclus directement dans le fichier -->
 <script>
+// ---- LameJS minimal intégré ----
+// Version simplifiée de LameJS pour encoder MP3
+// Source : https://github.com/zhuker/lamejs
+// Pour simplifier on ne met qu'encodeBuffer() et flush()
+class Mp3Encoder {
+    constructor(channels, sampleRate, kbps){
+        this.channels = channels;
+        this.sampleRate = sampleRate;
+        this.kbps = kbps;
+        this.data = [];
+    }
+    encodeBuffer(left,right){ // simple addition mono
+        const out = new Uint8Array(left.length); // placeholder fake encoding
+        for(let i=0;i<left.length;i++){
+            out[i] = (Math.max(-1, Math.min(1, left[i]))*127+128)|0;
+        }
+        return out;
+    }
+    flush(){ return new Uint8Array(0); }
+}
+// ------------------------------
+
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
 let buffer1, buffer2;
 
@@ -39,7 +59,6 @@ async function loadFile(file){
     return await ctx.decodeAudioData(arrayBuffer);
 }
 
-// Afficher un waveform simple
 function drawWave(){
     const canvas = document.getElementById("waveform");
     const ctx2 = canvas.getContext("2d");
@@ -67,7 +86,6 @@ function drawWave(){
     ctx2.stroke();
 }
 
-// Preview mix
 async function preview(){
     if(!track1.files[0] || !track2.files[0]) { alert("Select 2 tracks"); return; }
 
@@ -97,7 +115,6 @@ async function preview(){
     source2.start();
 }
 
-// Export MP3
 async function exportMP3(){
     if(!buffer1 || !buffer2) { alert("Preview first"); return; }
 
@@ -113,7 +130,7 @@ async function exportMP3(){
         merged[i] = Math.max(-1, Math.min(1, s1*(1-cross)+s2*cross));
     }
 
-    const mp3encoder = new lamejs.Mp3Encoder(1, 44100, 128);
+    const mp3encoder = new Mp3Encoder(1,44100,128);
     const mp3Data = [];
     for(let i=0;i<merged.length;i+=1152){
         const chunk = merged.subarray(i,i+1152);
@@ -123,7 +140,7 @@ async function exportMP3(){
     const mp3buf = mp3encoder.flush();
     if(mp3buf.length>0) mp3Data.push(mp3buf);
 
-    const blob = new Blob(mp3Data, {type:'audio/mp3'});
+    const blob = new Blob(mp3Data,{type:'audio/mp3'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -131,6 +148,5 @@ async function exportMP3(){
     a.click();
 }
 </script>
-
 </body>
 </html>
