@@ -3,18 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <title>Web DJ Mixer</title>
-<script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
 <style>
 body { font-family: sans-serif; background:#111; color:white; padding:20px; }
 .slider { width: 300px; }
 button { margin: 5px; }
 </style>
 </head>
-<body>
 
+<body>
 <h2>Web DJ Mixer</h2>
 
-<!-- Upload des deux pistes -->
+<!-- Upload des pistes -->
 Track 1: <input type="file" id="track1"><br>
 Track 2: <input type="file" id="track2"><br><br>
 
@@ -29,21 +28,25 @@ Pitch Track 2: <input type="range" id="pitch2" min="0.5" max="2" step="0.01" val
 
 <audio id="player" controls></audio>
 
+<!-- LameJS inclus localement -->
+<script src="lame.min.js"></script>
+
 <script>
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
 let buffer1, buffer2;
 
+// Charger un fichier audio local
 async function loadFile(file) {
     const arrayBuffer = await file.arrayBuffer();
     return await ctx.decodeAudioData(arrayBuffer);
 }
 
-// Crossfader mix
+// Crossfader
 function getCrossGain() {
     return parseFloat(document.getElementById('cross').value);
 }
 
-// Preview mix
+// Prévisualisation du mix
 async function preview() {
     if(!track1.files[0] || !track2.files[0]) { alert("Select 2 tracks"); return; }
 
@@ -61,8 +64,8 @@ async function preview() {
 
     const gain1 = ctx.createGain();
     const gain2 = ctx.createGain();
-
     const cross = getCrossGain();
+
     gain1.gain.value = 1 - cross;
     gain2.gain.value = cross;
 
@@ -73,16 +76,16 @@ async function preview() {
     source2.start();
 }
 
-// Simple auto-align (aligne le début des 2 pistes)
+// Auto-align simple (aligne le début des pistes)
 function autoAlign() {
-    alert("Auto-align: currently aligns track start. Full BPM sync requires Meyda/analysis.");
+    alert("Auto-align: currently aligns track start. Advanced BPM sync requires additional audio analysis libraries.");
 }
 
-// Export mix en MP3
+// Export MP3 via LameJS
 async function exportMP3() {
     if(!buffer1 || !buffer2) { alert("Preview first"); return; }
 
-    // Merge pistes (simple addition sample par sample, clipping possible)
+    // Merge des pistes (addition sample par sample, avec clipping)
     const length = Math.max(buffer1.length, buffer2.length);
     const merged = new Float32Array(length);
 
@@ -90,19 +93,18 @@ async function exportMP3() {
     const pitch2 = parseFloat(document.getElementById('pitch2').value);
 
     for(let i=0;i<length;i++){
-        const sample1 = buffer1.getChannelData(0)[Math.floor(i/pitch1)] || 0;
-        const sample2 = buffer2.getChannelData(0)[Math.floor(i/pitch2)] || 0;
-        merged[i] = Math.max(-1, Math.min(1, sample1 + sample2));
+        const s1 = buffer1.getChannelData(0)[Math.floor(i/pitch1)] || 0;
+        const s2 = buffer2.getChannelData(0)[Math.floor(i/pitch2)] || 0;
+        merged[i] = Math.max(-1, Math.min(1, s1 + s2));
     }
 
-    // Encode MP3
+    // Encodage MP3
     const mp3encoder = new lamejs.Mp3Encoder(1, 44100, 128);
-    const samples = merged;
     const mp3Data = [];
-    let remaining = samples.length;
+    const samples = merged;
 
     for(let i=0; i<samples.length; i+=1152){
-        const chunk = samples.subarray(i, i+1152);
+        const chunk = samples.subarray(i,i+1152);
         const mp3buf = mp3encoder.encodeBuffer(chunk);
         if(mp3buf.length>0) mp3Data.push(mp3buf);
     }
@@ -119,6 +121,5 @@ async function exportMP3() {
     a.click();
 }
 </script>
-
 </body>
 </html>
