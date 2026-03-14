@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Web Mixer</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #fff; padding: 20px; }
+        .track-box { background: #1e1e1e; padding: 20px; margin-bottom: 20px; border-radius: 10px; border-left: 5px solid #555; }
+        .track-box.main { border-color: #d4af37; box-shadow: 0 0 10px rgba(212, 175, 55, 0.2); }
+        h3 { margin-top: 0; color: #d4af37; }
+        input[type="file"] { margin-bottom: 15px; }
+        .control-group { margin: 10px 0; display: flex; align-items: center; gap: 15px; }
+        .control-group label { width: 120px; }
+        button { background: #d4af37; color: #000; border: none; padding: 10px 20px; font-weight: bold; border-radius: 5px; cursor: pointer; font-size: 16px; margin-right: 10px; }
+        button:hover { background: #e6c27a; }
+        #status { margin-top: 20px; font-style: italic; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <h2>🎧 Smart Web Mixer</h2>
+
+    <div class="track-box main" id="box1">
+        <h3>Piste 1 <input type="radio" name="mainTrack" value="1" checked onchange="updateUI()"> (Principale)</h3>
+        <input type="file" id="file1" accept="audio/*"><br>
+        <div class="control-group">
+            <label>Départ (secondes):</label>
+            <input type="number" id="start1" value="0" min="0" step="0.5" style="width: 80px;">
+        </div>
+        <div class="control-group">
+            <label>Tempo (Vitesse):</label>
+            <input type="range" id="tempo1" min="0.5" max="1.5" step="0.01" value="1" oninput="document.getElementById('valT1').innerText = this.value + 'x'">
+            <span id="valT1">1x</span>
+        </div>
+    </div>
+
+    <div class="track-box" id="box2">
+        <h3>Piste 2 <input type="radio" name="mainTrack" value="2" onchange="updateUI()"> (Principale)</h3>
+        <input type="file" id="file2" accept="audio/*"><br>
+        <div class="control-group">
+            <label>Départ (secondes):</label>
+            <input type="number" id="start2" value="0" min="0" step="0.5" style="width: 80px;">
+        </div>
+        <div class="control-group">
+            <label>Tempo (Vitesse):</label>
+            <input type="range" id="tempo2" min="0.5" max="1.5" step="0.01" value="1" oninput="document.getElementById('valT2').innerText = this.value + 'x'">
+            <span id="valT2">1x</span>
+        </div>
+    </div>
+
+    <div>
+        <button onclick="previewMix()">▶️ Écouter l'Aperçu</button>
+        <button onclick="stopMix()" style="background: #ff4444; color: white;">⏹️ Stopper</button>
+        <button onclick="exportMP3()">💾 Exporter en MP3</button>
+    </div>
+
+    <div id="status">En attente de fichiers...</div>
+
+    <script src="https://unpkg.com/lamejs@1.2.0/lame.min.js"></script>
+
+    <script>
+        // Le contexte audio principal pour l'écoute en direct
+        const liveCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let buffers = { 1: null, 2: null };
+        let liveSources = [];
+
+        // Met à jour les couleurs selon la piste principale choisie
+        function updateUI() {
+            const isMain1 = document.querySelector('input[name="mainTrack"]:checked').value === "1";
+            document.getElementById('box1').className = isMain1 ? "track-box main" : "track-box";
+            document.getElementById('box2').className = !isMain1 ? "track-box main" : "track-box";
+        }
+
+        // Charge et décode un fichier audio
+        async function loadBuffer(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            return await liveCtx.decodeAudioData(arrayBuffer);
+        }
+
+        // Prépare le réseau audio (utilisable pour le Live et l'Export)
+        function buildAudioGraph(context) {
+            const sources = [];
+            const isMain1 = document.querySelector('input[name="mainTrack"]:checked').value === "1";
+
+            [1, 2].forEach(num => {
+                if (!buffers[num]) return;
+
+                const source = context.createBufferSource();
+                source.buffer = buffers[num];
+                
+                // Magie du Web Audio : Change le tempo sans changer le pitch (la hauteur de la voix)
+                source.playbackRate.value = parseFloat(document.getElementById(`tempo${num}`).value);
+                source.preservesPitch = true; 
+
+                const gainNode = context.createGain();
+                
+                // Gestion de la Piste Principale : La principale est à 1.0, l'autre est baissée à 0.4
+                if ((num === 1 && isMain1) || (num === 2 && !isMain1)) {
+                    gainNode.gain.value = 1.0; 
+                } else {
+                    gainNode.gain.value = 0.4; // Ducking automatique
+                }
+
+                source.connect(gainNode).connect(context.destination);
+                
+                const startTime = parseFloat(document.getElementById(`start${num}`).value);
+                sources.push({ node: source, offset: startTime });
+            });
+
+            return sources;
+        }
+
+        // Bouton : Écouter en direct
+        async function previewMix() {
+            stopMix();
+            document.getElementById('status').innerText = "Préparation de l'aperçu...";
+
+            try {
+                const file1 = document.getElementById('file1').files[0];
+                const file2 = document.getElementById('file2').files[0];
+
+                if (!buffers[1] && file1) buffers[1] = await loadBuffer(file1);
+                if (!buffers[2] && file2) buffers[2] = await loadBuffer(file2);
+
+                if (!buffers[1] && !buffers[2]) throw new Error("Veuillez importer au moins une piste.");
+
+                liveSources = buildAudioGraph(liveCtx);
+                liveSources.forEach(s => s.node.start(liveCtx.currentTime + s.offset));
+                
+                document.getElementById('status').innerText = "Lecture en cours...";
+            } catch (err) {
+                document.getElementById('status').innerText = "Erreur : " + err.message;
+            }
+        }
+
+        // Bouton : Stopper
+        function stopMix() {
+            liveSources.forEach(s => {
+                try { s.node.stop(); } catch(e) {}
+            });
+            liveSources = [];
+            document.getElementById('status').innerText = "Stoppé.";
+        }
+
+        // Bouton : Exporter en MP3 avec OfflineAudioContext
+        async function exportMP3() {
+            if (!buffers[1] && !buffers[2]) return alert("Importez des pistes avant d'exporter.");
+            document.getElementById('status').innerText = "Génération du mix en cours (patientez)...";
+
+            // Calcule la durée totale nécessaire pour l'export
+            let maxDuration = 0;
+            [1, 2].forEach(num => {
+                if (buffers[num]) {
+                    const tempo = parseFloat(document.getElementById(`tempo${num}`).value);
+                    const start = parseFloat(document.getElementById(`start${num}`).value);
+                    const duration = (buffers[num].duration / tempo) + start;
+                    if (duration > maxDuration) maxDuration = duration;
+                }
+            });
+
+            // Crée un studio virtuel "hors ligne" (2 channels, 44100Hz)
+            const offlineCtx = new OfflineAudioContext(2, 44100 * maxDuration, 44100);
+            
+            // Construit le même réseau audio, mais dans le studio virtuel
+            const renderSources = buildAudioGraph(offlineCtx);
+            renderSources.forEach(s => s.node.start(s.offset));
+
+            // Fait le rendu instantané
+            const renderedBuffer = await offlineCtx.startRendering();
+
+            document.getElementById('status').innerText = "Encodage en MP3...";
+            
+            // --- ENCODAGE LAMEJS ---
+            // LameJS a besoin de canaux séparés en Int16 (Gauche et Droite)
+            const leftChannel = renderedBuffer.getChannelData(0);
+            const rightChannel = renderedBuffer.numberOfChannels > 1 ? renderedBuffer.getChannelData(1) : leftChannel;
+            const length = renderedBuffer.length;
+            
+            const leftInt16 = new Int16Array(length);
+            const rightInt16 = new Int16Array(length);
+
+            for (let i = 0; i < length; i++) {
+                leftInt16[i] = leftChannel[i] < 0 ? leftChannel[i] * 32768 : leftChannel[i] * 32767;
+                rightInt16[i] = rightChannel[i] < 0 ? rightChannel[i] * 32768 : rightChannel[i] * 32767;
+            }
+
+            const encoder = new lamejs.Mp3Encoder(2, 44100, 192); // Stéréo, 192kbps
+            const mp3Data = [];
+
+            for (let i = 0; i < length; i += 1152) {
+                const leftChunk = leftInt16.subarray(i, i + 1152);
+                const rightChunk = rightInt16.subarray(i, i + 1152);
+                const mp3buf = encoder.encodeBuffer(leftChunk, rightChunk);
+                if (mp3buf.length > 0) mp3Data.push(mp3buf);
+            }
+
+            const endBuf = encoder.flush();
+            if (endBuf.length > 0) mp3Data.push(endBuf);
+
+            // Téléchargement
+            const blob = new Blob(mp3Data, { type: "audio/mp3" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "SmartMix.mp3";
+            a.click();
+
+            document.getElementById('status').innerText = "Export terminé avec succès !";
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+        }
+    </script>
+</body>
+</html>
